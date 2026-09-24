@@ -13650,17 +13650,17 @@ body {
 }
 
 .customer-access-table {
-  min-width: 1050px;
+  min-width: 1000px;
   overflow-x: auto;
 }
 
 .customer-access-row {
   min-height: 82px;
   display: grid;
-  grid-template-columns: minmax(230px, 1.55fr) minmax(100px, .65fr) minmax(210px, 1.3fr) minmax(150px, 1fr) minmax(105px, .7fr) 88px 54px;
+  grid-template-columns: minmax(210px, 1.55fr) minmax(90px, .65fr) minmax(180px, 1.3fr) minmax(130px, 1fr) minmax(100px, .7fr) 75px 100px;
   align-items: center;
-  gap: 16px;
-  padding: 12px 22px;
+  gap: 12px;
+  padding: 12px 16px;
   border-bottom: 1px solid #eee5df;
 }
 
@@ -13859,6 +13859,21 @@ button.permission-chip.is-more:focus-visible {
 .customer-access-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 6px;
+}
+
+.customer-access-actions .share-catalog-action {
+  width: auto;
+  min-width: 54px;
+  padding: 0 5px;
+  color: var(--access-red);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.customer-access-actions .share-catalog-action:disabled {
+  color: #aa9e99;
+  cursor: not-allowed;
 }
 
 .customer-access-actions .table-icon {

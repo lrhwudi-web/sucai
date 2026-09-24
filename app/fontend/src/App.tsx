@@ -180,7 +180,7 @@ export function App() {
         setCurrentUser(user);
         const requestedView = viewFromHash();
         if (!user && requestedView !== "landing") {
-          window.location.hash = "";
+          if (requestedView !== "quotation" && requestedView !== "orders") window.location.hash = "";
           setActiveView("landing");
         } else if (user && requestedView === "landing") {
           window.location.hash = "catalogue";
@@ -200,7 +200,7 @@ export function App() {
         setCurrentUser(null);
         setToast(error instanceof Error ? error.message : "We could not connect to the account service.");
         if (viewFromHash() !== "landing") {
-          window.location.hash = "";
+          if (viewFromHash() !== "quotation" && viewFromHash() !== "orders") window.location.hash = "";
           setActiveView("landing");
         }
       })
@@ -283,7 +283,7 @@ export function App() {
     const syncViewFromHash = () => {
       const nextView = viewFromHash();
       if (!sessionLoading && nextView !== "landing" && !currentUser) {
-        window.location.hash = "";
+        if (nextView !== "quotation" && nextView !== "orders") window.location.hash = "";
         setActiveView("landing");
         return;
       }
@@ -718,9 +718,11 @@ export function App() {
   };
 
   const handleLoginSuccess = (user: AuthUser) => {
+    const requestedView = viewFromHash();
+    const destination = requestedView === "quotation" || requestedView === "orders" ? requestedView : "catalogue";
     setCurrentUser(user);
-    setActiveView("catalogue");
-    window.history.replaceState(null, "", "#catalogue");
+    setActiveView(destination);
+    window.history.replaceState(null, "", `#${destination}`);
     setFiltersOpen(false);
     setSearch("");
     setFavoriteOnly(false);

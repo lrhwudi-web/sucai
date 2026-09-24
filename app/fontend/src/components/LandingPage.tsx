@@ -80,16 +80,16 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
 
       <section className="login-command-auth" aria-labelledby="login-title">
         <div className="login-command-content">
-          <BrandMark className="login-command-brand" subtitle="Client Asset Center" />
+          <BrandMark className="login-command-brand" subtitle="Client Catalog & Orders" />
 
           <div className="login-command-kicker">
             <ShieldCheck size={18} weight="bold" aria-hidden="true" />
-            <span>KAIRAY GOLF · CLIENT ASSET PORTAL</span>
+            <span>KAIRAY GOLF · CLIENT CATALOG</span>
           </div>
 
           <header className="login-command-heading">
-            <h1 id="login-title">Sign in to your Asset Center</h1>
-            <p>Use your approved business email to access your client library.</p>
+            <h1 id="login-title">See products. Build your order.</h1>
+            <p>Sign in with your business email to check your catalog and order online.</p>
           </header>
 
           <form className="login-command-form" onSubmit={submitLogin}>
@@ -137,7 +137,6 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
             {notice && <p className="login-message" role="status">{notice}</p>}
 
             <div className="login-form-options">
-              <label><input type="checkbox" /> <span>Remember me</span></label>
               <button
                 type="button"
                 onClick={() => setNotice("Contact your KAIRAY GOLF representative to reset your password.")}
@@ -149,7 +148,7 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
             <button className="login-submit" type="submit" disabled={submitting}>
               {submitting
                 ? <><SpinnerGap size={20} weight="bold" /> Signing in</>
-                : <>Sign in to Asset Center <ArrowRight size={20} weight="bold" /></>}
+                : <>Open my catalog <ArrowRight size={20} weight="bold" /></>}
             </button>
           </form>
 

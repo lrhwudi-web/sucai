@@ -457,6 +457,20 @@ export function PermissionsPanel({
     }
   };
 
+  const copyCustomerCatalogInvite = async (user: AdminUser) => {
+    if (user.disabled) return;
+    const catalogUrl = `${window.location.origin}${window.location.pathname}#quotation`;
+    const message = user.role === "海外客户" || user.role === "overseas_customer"
+      ? `Hi ${user.name}, here is your Kairay Golf product catalog: ${catalogUrl}\nSign in with your business account to view products, enter quantities, and send your order. Reply here if you need a quote or help.`
+      : `${user.name}，这是您的凯瑞高尔夫产品目录：${catalogUrl}\n使用客户账号登录后可查看产品、填写数量并提交订单。如需报价或协助，直接在微信回复我。`;
+    try {
+      await navigator.clipboard.writeText(message);
+      onNotify(`已复制发给 ${user.name} 的目录消息，可粘贴到微信`);
+    } catch {
+      onNotify("复制失败，请检查浏览器剪贴板权限后重试");
+    }
+  };
+
   return (
     <section className="admin-section customer-access-page">
       <header className="customer-access-heading">
@@ -471,7 +485,7 @@ export function PermissionsPanel({
         </div>
 
         <div className="customer-access-table" role="table" aria-label="客户账号列表">
-              <div className="customer-access-row is-head" role="row"><span>账号</span><span>角色</span><span>可见品牌</span><span>扩展素材</span><span>有效期至</span><span>状态</span><span /></div>
+              <div className="customer-access-row is-head" role="row"><span>账号</span><span>角色</span><span>可见品牌</span><span>扩展素材</span><span>有效期至</span><span>状态</span><span>操作</span></div>
               {filteredUsers.map((user) => {
                 const visibleBrands = visibleBrandsFor(user);
                 const extras = extraScopesFor(user);
@@ -484,7 +498,7 @@ export function PermissionsPanel({
                     <span className="permission-chip-list">{extras.slice(0, 1).map((value) => <em className="permission-chip is-muted" key={value}>{value}</em>)}<PermissionOverflow label="扩展素材" values={extras.slice(1)} onShow={showPermissionTooltip} onHide={() => setPermissionTooltip(null)} />{!extras.length && <small className="permission-empty">—</small>}</span>
                     <span className="customer-access-date">{user.expiresAt || "创建后 15 天"}</span>
                     <span><em className={`customer-status ${user.disabled ? "is-disabled" : ""}`}><i /> {user.disabled ? "已停用" : "正常"}</em></span>
-                    <span className="customer-access-actions"><button className="table-icon" onClick={() => openAccountEditor(user)} aria-label={`修改 ${user.name} 的账号`} title="修改账号、权限和密码"><PencilSimple size={17} weight="bold" /></button></span>
+                    <span className="customer-access-actions"><button className="table-icon share-catalog-action" type="button" disabled={user.disabled} onClick={() => void copyCustomerCatalogInvite(user)} aria-label={`复制发给 ${user.name} 的目录消息`} title={user.disabled ? "账号已停用，启用后才能邀请" : "复制目录链接和说明，粘贴到微信"}>发目录</button><button className="table-icon" type="button" onClick={() => openAccountEditor(user)} aria-label={`修改 ${user.name} 的账号`} title="修改账号、权限和密码"><PencilSimple size={17} weight="bold" /></button></span>
                   </div>
                 );
               })}
