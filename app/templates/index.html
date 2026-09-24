@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="browse-shell">
+  <aside class="filters">
+    <div class="filter-head">
+      <strong>Filters</strong>
+      <a class="link-button" href="/">Reset</a>
+    </div>
+    <form method="get" class="filter-form">
+      <input type="hidden" name="lang" value="{{ filters.lang }}">
+      <label class="field">
+        <span>Search</span>
+        <input name="q" value="{{ filters.q }}" placeholder="SKU, English name, file path">
+      </label>
+      <label class="field">
+        <span>Brand</span>
+        <select name="brand" data-brand-filter>
+          <option value="">All brands</option>
+          {% for item in facets.brands %}<option value="{{ item }}" {% if filters.brand == item %}selected{% endif %}>{{ folder_label(item) }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span>Category</span>
+        <select name="category" data-category-filter>
+          <option value="">All categories</option>
+          {% set category_options = facets.categories_by_brand.get(filters.brand, facets.categories) if filters.brand else facets.categories %}
+          {% for item in category_options %}<option value="{{ item }}" {% if filters.category == item %}selected{% endif %}>{{ folder_label(item) }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span>Other</span>
+        <select name="other">
+          <option value="">All others</option>
+          {% for item in facets.others %}<option value="{{ item }}" {% if filters.other == item %}selected{% endif %}>{{ item }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span>Asset type</span>
+        <select name="asset_type">
+          <option value="">All types</option>
+          {% for item in facets.asset_types %}<option value="{{ item }}" {% if filters.asset_type == item %}selected{% endif %}>{{ item }}</option>{% endfor %}
+        </select>
+      </label>
+      <button class="button primary" type="submit">Apply filters</button>
+    </form>
+
+    <div class="filter-group">
+      <p class="filter-title">Sync source</p>
+      <div class="info-list tight">
+        <div class="info-row"><span>Root</span><span>{{ status.root_id or '-' }}</span></div>
+        <div class="info-row"><span>Status</span><span>{{ status.state }}</span></div>
+        <div class="info-row"><span>Indexed</span><span>{{ status.file_count }} files</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <section class="main-pane">
+    <div class="share-banner">
+      <div><strong>Material library</strong><span>Search product assets from the indexed Google Drive folder.</span></div>
+      <div><strong data-loaded-products>{{ stats.products }} products</strong><span><span data-loaded-files>{{ stats.files }}</span> files loaded, scroll for more</span></div>
+      <div><strong>Role access ready</strong><span>客户和服务商只看到当前角色允许的素材。</span></div>
+    </div>
+    <div class="toolbar">
+      <strong>Browse</strong>
+      <span class="chip green"><span data-loaded-images>{{ stats.images }}</span> images</span>
+      <span class="chip blue"><span data-loaded-videos>{{ stats.videos }}</span> videos</span>
+      <span class="chip"><span data-loaded-files-chip>{{ stats.files }}</span> files loaded</span>
+      <span class="spacer"></span>
+      {% if user.role == 'admin' %}
+      <form method="post" action="/admin/sync"><button class="button">Sync Drive</button></form>
+      {% endif %}
+    </div>
+    <div class="grid-wrap">
+      <div class="product-grid" data-product-grid>
+        {% for product in products %}
+        <article class="product-card">
+          <a class="thumb" href="/sku/{{ product.sku }}">
+            {% if product.cover_id and product.cover_mime.startswith('image/') %}
+            <img src="/thumb/{{ product.cover_id }}?variant=card" alt="{{ product.name }}" loading="lazy" decoding="async" fetchpriority="low">
+            {% elif product.cover_id and product.cover_mime.startswith('video/') %}
+            <video src="/media/{{ product.cover_id }}" preload="metadata"></video>
+            {% else %}
+            <span class="filebox">No preview</span>
+            {% endif %}
+          </a>
+          <div class="card-body">
+            <a class="product-name" href="/sku/{{ product.sku }}">{{ product.name }}</a>
+            <dl class="product-meta">
+              <div><dt>Brand</dt><dd>{{ product.brand or '-' }}</dd></div>
+              <div><dt>Product type</dt><dd>{{ product.category or '-' }}</dd></div>
+              {% if product.other %}<div><dt>Other</dt><dd>{{ product.other }}</dd></div>{% endif %}
+              <div><dt>SKU</dt><dd>{{ product.sku }}</dd></div>
+            </dl>
+            <div class="asset-counts">
+              <span>{{ product.image_count }} images</span>
+              <span>{{ product.video_count }} videos</span>
+            </div>
+            <div class="card-actions">
+              <a class="button" href="/sku/{{ product.sku }}">Details</a>
+              <a class="button primary" href="/sku/{{ product.sku }}/zip" data-zip-sku="{{ product.sku }}">ZIP</a>
+            </div>
+          </div>
+        </article>
+        {% else %}
+        <p class="empty">No assets found. Adjust filters or run Drive sync.</p>
+        {% endfor %}
+      </div>
+      <div class="load-sentinel" data-load-more data-next-offset="{{ next_offset }}" data-limit="{{ page_size }}" data-has-more="{% if has_more %}1{% else %}0{% endif %}">
+        {% if has_more %}Scroll to load more{% else %}All matching assets loaded{% endif %}
+      </div>
+    </div>
+  </section>
+
+</section>
+<script>
+  (() => {
+    const brand = document.querySelector("[data-brand-filter]");
+    const category = document.querySelector("[data-category-filter]");
+    if (!brand || !category) return;
+    const allCategories = {{ facets.categories | tojson }};
+    const categoriesByBrand = {{ facets.categories_by_brand | tojson }};
+    const folderLabel = (value) => value.replace(/^\d{2}[\s._-]+/, "").trim();
+
+    const refreshCategories = () => {
+      const selected = category.value;
+      const values = brand.value ? (categoriesByBrand[brand.value] || []) : allCategories;
+      category.replaceChildren(new Option("All categories", ""));
+      values.forEach((value) => category.add(new Option(folderLabel(value), value)));
+      category.value = values.includes(selected) ? selected : "";
+    };
+
+    brand.addEventListener("change", refreshCategories);
+  })();
+
+  (() => {
+    const grid = document.querySelector("[data-product-grid]");
+    const sentinel = document.querySelector("[data-load-more]");
+    if (!grid || !sentinel) return;
+
+    const state = {
+      offset: Number(sentinel.dataset.nextOffset || 0),
+      limit: Number(sentinel.dataset.limit || 600),
+      hasMore: sentinel.dataset.hasMore === "1",
+      loading: false,
+      files: Number(document.querySelector("[data-loaded-files]")?.textContent || 0),
+      products: Number((document.querySelector("[data-loaded-products]")?.textContent || "0").split(" ", 1)[0]),
+      images: Number(document.querySelector("[data-loaded-images]")?.textContent || 0),
+      videos: Number(document.querySelector("[data-loaded-videos]")?.textContent || 0),
+    };
+
+    function setText(selector, value) {
+      document.querySelectorAll(selector).forEach((node) => { node.textContent = value; });
+    }
+
+    function updateCounters(stats) {
+      state.files += stats.files || 0;
+      state.products += stats.products || 0;
+      state.images += stats.images || 0;
+      state.videos += stats.videos || 0;
+      setText("[data-loaded-files], [data-loaded-files-chip]", state.files);
+      setText("[data-loaded-products]", `${state.products} products`);
+      setText("[data-loaded-images]", state.images);
+      setText("[data-loaded-videos]", state.videos);
+    }
+
+    function addText(parent, tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      node.textContent = text || "";
+      parent.appendChild(node);
+      return node;
+    }
+
+    function addProduct(product) {
+      const skuPath = encodeURIComponent(product.sku);
+      const article = document.createElement("article");
+      article.className = "product-card";
+
+      const thumb = document.createElement("a");
+      thumb.className = "thumb";
+      thumb.href = `/sku/${skuPath}`;
+      if (product.cover_id && product.cover_mime.startsWith("image/")) {
+        const filePath = encodeURIComponent(product.cover_id);
+        const img = document.createElement("img");
+        img.src = `/thumb/${filePath}?variant=drawer`;
+        img.alt = product.name || "";
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.setAttribute("fetchpriority", "low");
+        thumb.appendChild(img);
+      } else if (product.cover_id && product.cover_mime.startsWith("video/")) {
+        const video = document.createElement("video");
+        video.src = `/media/${encodeURIComponent(product.cover_id)}#t=0.1`;
+        video.preload = "metadata";
+        video.muted = true;
+        video.playsInline = true;
+        thumb.appendChild(video);
+      } else {
+        addText(thumb, "span", "filebox", "No preview");
+      }
+      article.appendChild(thumb);
+
+      const body = document.createElement("div");
+      body.className = "card-body";
+      const productName = addText(body, "a", "product-name", product.name);
+      productName.href = `/sku/${skuPath}`;
+      const meta = document.createElement("dl");
+      meta.className = "product-meta";
+      const metaRows = [["Brand", product.brand], ["Product type", product.category]];
+      if (product.other) metaRows.push(["Other", product.other]);
+      metaRows.push(["SKU", product.sku]);
+      metaRows.forEach(([label, value]) => {
+        const row = document.createElement("div");
+        addText(row, "dt", "", label);
+        addText(row, "dd", "", value || "-");
+        meta.appendChild(row);
+      });
+      body.appendChild(meta);
+      const counts = document.createElement("div");
+      counts.className = "asset-counts";
+      addText(counts, "span", "", `${product.image_count} images`);
+      addText(counts, "span", "", `${product.video_count} videos`);
+      body.appendChild(counts);
+      const actions = document.createElement("div");
+      actions.className = "card-actions";
+      const details = addText(actions, "a", "button", "Details");
+      details.href = `/sku/${skuPath}`;
+      const zip = addText(actions, "a", "button primary", "ZIP");
+      zip.href = `/sku/${skuPath}/zip`;
+      zip.dataset.zipSku = product.sku;
+      body.appendChild(actions);
+      article.appendChild(body);
+      grid.appendChild(article);
+    }
+
+    async function loadMore() {
+      if (!state.hasMore || state.loading) return;
+      state.loading = true;
+      sentinel.textContent = "Loading more...";
+      const params = new URLSearchParams(window.location.search);
+      params.set("offset", state.offset);
+      params.set("limit", state.limit);
+      try {
+        const response = await fetch(`/api/products?${params}`, { headers: { "Accept": "application/json" } });
+        if (!response.ok) throw new Error("load failed");
+        const data = await response.json();
+        data.products.forEach(addProduct);
+        updateCounters(data.stats || {});
+        state.offset = data.next_offset;
+        state.hasMore = Boolean(data.has_more);
+        sentinel.dataset.nextOffset = state.offset;
+        sentinel.dataset.hasMore = state.hasMore ? "1" : "0";
+        sentinel.textContent = state.hasMore ? "Scroll to load more" : "All matching assets loaded";
+      } catch (error) {
+        sentinel.textContent = "Load failed, scroll again to retry";
+      } finally {
+        state.loading = false;
+      }
+    }
+
+    if (!state.hasMore) return;
+    if (!("IntersectionObserver" in window)) {
+      sentinel.addEventListener("click", loadMore);
+      sentinel.textContent = "Click to load more";
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMore();
+    }, { rootMargin: "700px 0px" });
+    observer.observe(sentinel);
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,141 @@
+{
+  "taxonomy_id": "golf-product-taxonomy",
+  "version": "2.0.0",
+  "locale": "en-US",
+  "model": {
+    "primary_category": "Each product has one primary category.",
+    "customer_filter": "Customers may select multiple categories.",
+    "custom_categories": "Administrators may add categories inside the two product groups."
+  },
+  "categories": [
+    {"id": "HC_PLUSH", "group": "Golf Headcover", "label_zh": "毛绒杆套", "label_en": "Plush Covers", "active": true},
+    {"id": "HC_DRIVER", "group": "Golf Headcover", "label_zh": "一号木杆套", "label_en": "Driver Covers", "active": true},
+    {"id": "HC_FAIRWAY", "group": "Golf Headcover", "label_zh": "球道木杆套", "label_en": "Fairway Covers", "active": true},
+    {"id": "HC_HYBRID", "group": "Golf Headcover", "label_zh": "混合木杆套", "label_en": "Hybrid Covers", "active": true},
+    {"id": "HC_PUTTER_BLADE", "group": "Golf Headcover", "label_zh": "直条推杆套", "label_en": "Blade Putter Covers", "active": true},
+    {"id": "HC_PUTTER_MALLET_LARGE", "group": "Golf Headcover", "label_zh": "大半圆推杆套", "label_en": "Mallet Putter Covers", "active": true},
+    {"id": "HC_PUTTER_MALLET_SMALL", "group": "Golf Headcover", "label_zh": "小半圆推杆套", "label_en": "Mid-Mallet Putter Covers", "active": true},
+    {"id": "HC_PUTTER_SQUARE", "group": "Golf Headcover", "label_zh": "方形推杆套", "label_en": "Square Mallet Putter Covers", "active": true},
+    {"id": "HC_IRON", "group": "Golf Headcover", "label_zh": "铁杆套装", "label_en": "Iron Cover Sets", "active": true},
+    {"id": "HC_WEDGE", "group": "Golf Headcover", "label_zh": "沙杆套装", "label_en": "Wedge Cover Sets", "active": true},
+    {"id": "HC_ALIGNMENT", "group": "Golf Headcover", "label_zh": "方向棒套", "label_en": "Alignment Stick Covers", "active": true},
+
+    {"id": "ACC_DIVOT_MARKER", "group": "Golf Accessories", "label_zh": "果岭叉与球标", "label_en": "Divot Tools & Ball Markers", "active": true},
+    {"id": "ACC_SCOREBOOK", "group": "Golf Accessories", "label_zh": "记分卡套", "label_en": "Scorecard Holders", "active": true},
+    {"id": "ACC_TOWEL", "group": "Golf Accessories", "label_zh": "高尔夫毛巾", "label_en": "Golf Towels", "active": true},
+    {"id": "ACC_BALL_TEE_POUCH", "group": "Golf Accessories", "label_zh": "高尔夫球及球钉收纳袋", "label_en": "Golf Ball & Tee Pouchs", "active": true},
+    {"id": "ACC_VALUABLES_POUCH", "group": "Golf Accessories", "label_zh": "贵重物品收纳袋", "label_en": "Valuables Pouches", "active": true},
+    {"id": "ACC_GLOVE_CASE", "group": "Golf Accessories", "label_zh": "手套架", "label_en": "Glove Caddie", "active": true},
+    {"id": "ACC_RANGEFINDER_CASE", "group": "Golf Accessories", "label_zh": "测距仪包", "label_en": "Rangefinder Case", "active": true},
+    {"id": "ACC_OTHER", "group": "Golf Accessories", "label_zh": "其他", "label_en": "Others", "active": true},
+
+    {"id": "HC_SET", "group": "Legacy", "label_zh": "杆套套装", "label_en": "Headcover Set", "active": false},
+    {"id": "ACC_GOLF_BAG", "group": "Legacy", "label_zh": "高尔夫球包", "label_en": "Golf Bag", "active": false},
+    {"id": "ACC_GOLF_BAG_STRAP", "group": "Legacy", "label_zh": "球包带", "label_en": "Golf Bag Strap", "active": false},
+    {"id": "ACC_GOLF_CART", "group": "Legacy", "label_zh": "球车用品", "label_en": "Golf Cart Accessory", "active": false},
+    {"id": "ACC_GOLF_GLOVE", "group": "Legacy", "label_zh": "高尔夫手套", "label_en": "Golf Glove", "active": false},
+    {"id": "ACC_CART_CHARGER", "group": "Legacy", "label_zh": "高尔夫球车充电器", "label_en": "Golf Cart Charger", "active": false},
+    {"id": "APPAREL", "group": "Legacy", "label_zh": "服饰", "label_en": "Apparel", "active": false},
+    {"id": "APPAREL_HAT", "group": "Legacy", "label_zh": "帽子", "label_en": "Hat", "active": false},
+    {"id": "SPORT_PICKLEBALL_PADDLE_COVER", "group": "Legacy", "label_zh": "匹克球拍套", "label_en": "Pickleball Paddle Cover", "active": false},
+    {"id": "UNKNOWN", "group": "System", "label_zh": "待确认", "label_en": "Needs Review", "active": false}
+  ],
+  "tags": [
+    {
+      "id": "PLUSH_ANIMAL",
+      "label_zh": "毛绒 / 动物玩偶",
+      "label_en": "Plush / Animal",
+      "patterns_any": ["毛绒", "动物帽套", "\\bplush\\b", "stuffed"]
+    },
+    {
+      "id": "MODEL_DF21",
+      "label_zh": "DF2.1 型号",
+      "label_en": "DF2.1 Model",
+      "patterns_any": ["df\\s*2[._-]?\\s*1"]
+    },
+    {
+      "id": "MODEL_DF3",
+      "label_zh": "DF3 型号",
+      "label_en": "DF3 Model",
+      "patterns_any": ["\\bdf\\s*3\\b"]
+    },
+    {
+      "id": "MODEL_OZ1",
+      "label_zh": "OZ.1 型号",
+      "label_en": "OZ.1 Model",
+      "patterns_any": ["oz\\s*[._-]?\\s*1(?!i)"]
+    },
+    {
+      "id": "MODEL_OZ1I_HS",
+      "label_zh": "OZ.1i HS 型号",
+      "label_en": "OZ.1i HS Model",
+      "patterns_any": ["oz\\s*[._-]?\\s*1i\\s*hs"]
+    }
+  ],
+  "raw_category_aliases": {
+    "Plush Headcover": "HC_PLUSH",
+    "Plush Covers": "HC_PLUSH",
+    "02 Plush Cover": "HC_PLUSH",
+    "02 Plush Headcover": "HC_PLUSH",
+    "动物帽套": "HC_PLUSH",
+    "毛绒杆套": "HC_PLUSH",
+    "01 Headcover Set": "ACC_OTHER",
+    "Headcover Set": "ACC_OTHER",
+    "Driver Cover": "HC_DRIVER",
+    "Driver Covers": "HC_DRIVER",
+    "02 Driver Cover": "HC_DRIVER",
+    "03 Driver Cover": "HC_DRIVER",
+    "Fairway Cover": "HC_FAIRWAY",
+    "04 Fairway Cover": "HC_FAIRWAY",
+    "Hybrid Cover": "HC_HYBRID",
+    "05 Hybrid Cover": "HC_HYBRID",
+    "Blade Putter Cover": "HC_PUTTER_BLADE",
+    "06 Blade Putter Cover": "HC_PUTTER_BLADE",
+    "Mallet Putter Cover": "HC_PUTTER_MALLET_LARGE",
+    "07 Mallet Putter Cover": "HC_PUTTER_MALLET_LARGE",
+    "Mid-Mallet Putter Cover": "HC_PUTTER_MALLET_SMALL",
+    "Square Mallet Putter Cover": "HC_PUTTER_SQUARE",
+    "08 Square Mallet Putter Cover": "HC_PUTTER_SQUARE",
+    "Iron Cover": "HC_IRON",
+    "09 Iron Cover Set": "HC_IRON",
+    "Wedge Cover": "HC_WEDGE",
+    "10 Wedge Cover Set": "HC_WEDGE",
+    "Alignment Stick Cover": "HC_ALIGNMENT",
+    "11 Alignment Stick Cover": "HC_ALIGNMENT",
+    "Divot Tool & Ball Marker": "ACC_DIVOT_MARKER",
+    "12 Ball Marker & Divot Tool": "ACC_DIVOT_MARKER",
+    "Scorebook": "ACC_SCOREBOOK",
+    "13 Scorecard Holder": "ACC_SCOREBOOK",
+    "Golf Towel": "ACC_TOWEL",
+    "15 Golf Towl": "ACC_TOWEL",
+    "Golf Ball & Tee Pouch": "ACC_BALL_TEE_POUCH",
+    "17 Golf Ball Pouch": "ACC_BALL_TEE_POUCH",
+    "Golf Valuables Pouch": "ACC_VALUABLES_POUCH",
+    "14 Golf Pouch": "ACC_VALUABLES_POUCH",
+    "Golf Glove Case": "ACC_GLOVE_CASE",
+    "16 Glove Caddie": "ACC_GLOVE_CASE",
+    "Rangefinder Cases": "ACC_RANGEFINDER_CASE",
+    "18 Range Finder Case": "ACC_RANGEFINDER_CASE",
+    "Other Golf Accessory": "ACC_OTHER",
+    "Golf Accessories": "ACC_OTHER",
+    "Product packaging": "ACC_OTHER",
+    "Big Crazy 包装系列": "ACC_OTHER"
+  },
+  "legacy_category_remap": {
+    "HC_SET": "ACC_OTHER",
+    "ACC_GOLF_BAG": "ACC_OTHER",
+    "ACC_GOLF_BAG_STRAP": "ACC_OTHER",
+    "ACC_GOLF_CART": "ACC_OTHER",
+    "ACC_GOLF_GLOVE": "ACC_OTHER",
+    "ACC_CART_CHARGER": "ACC_OTHER",
+    "APPAREL": "ACC_OTHER",
+    "APPAREL_HAT": "ACC_OTHER",
+    "SPORT_PICKLEBALL_PADDLE_COVER": "ACC_OTHER"
+  },
+  "review_policy": {
+    "auto_accept_sources": ["human_correction", "sku_inheritance"],
+    "rule_auto_accept_min_confidence": 0.95,
+    "block_on_category_conflict": true,
+    "block_unknown": true
+  }
+}

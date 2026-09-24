@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Product Material Index</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260714-thumb-proxy-brand">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-mark">CRAFTSMAN GOLF</span>
+        <span class="brand-copy">
+          <strong>Product Material Index</strong>
+          <span>Google Drive Asset Portal</span>
+        </span>
+      </a>
+      {% if user is defined and user %}
+      <nav class="nav">
+        <a class="nav-link {% if request.url.path == '/' or request.url.path.startswith('/sku') %}active{% endif %}" href="/">Browse</a>
+        {% if user.role == 'admin' %}<a class="nav-link {% if request.url.path.startswith('/admin') %}active{% endif %}" href="/admin?section=pending">管理后台</a>{% endif %}
+      </nav>
+      <div class="top-actions">
+        <span class="chip green">{{ role_label(user.role) }}</span>
+        <span class="user-chip"><span class="avatar">{{ user.name[:1] | upper }}</span>{{ user.email }}</span>
+        <form action="/logout" method="post"><button class="button ghost">Logout</button></form>
+      </div>
+      {% endif %}
+    </header>
+    <main class="page">{% block content %}{% endblock %}</main>
+  </div>
+  <script>
+    (() => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      function showZipProgress(value, state = "building") {
+        let ring = document.querySelector("[data-zip-progress]");
+        if (!ring) {
+          ring = document.createElement("div");
+          ring.className = "zip-progress";
+          ring.dataset.zipProgress = "";
+          ring.setAttribute("role", "status");
+          ring.innerHTML = '<span class="zip-progress-value"></span>';
+          document.body.appendChild(ring);
+        }
+        const progress = Math.max(0, Math.min(100, Number(value) || 0));
+        ring.style.setProperty("--progress", `${progress * 3.6}deg`);
+        ring.querySelector(".zip-progress-value").textContent = `${Math.round(progress)}%`;
+        ring.dataset.state = state;
+        ring.setAttribute("aria-label", state === "error" ? "ZIP preparation failed" : `ZIP preparation ${Math.round(progress)}%`);
+        ring.hidden = false;
+        return ring;
+      }
+
+      function downloadInBackground(url) {
+        const frame = document.createElement("iframe");
+        frame.hidden = true;
+        frame.src = url;
+        document.body.appendChild(frame);
+        setTimeout(() => frame.remove(), 60000);
+      }
+
+      async function prepareZip(link) {
+        if (link.dataset.zipBusy === "1") return;
+        const sku = link.dataset.zipSku;
+        const label = link.textContent;
+        link.dataset.zipBusy = "1";
+        link.setAttribute("aria-busy", "true");
+        link.textContent = "Preparing...";
+        let ring = showZipProgress(0);
+        try {
+          let response = await fetch(`/sku/${encodeURIComponent(sku)}/zip/prepare`, { method: "POST" });
+          if (!response.ok) throw new Error("ZIP preparation failed");
+          let result = await response.json();
+          showZipProgress(result.progress || (result.state === "ready" ? 100 : 0));
+          while (result.state === "building") {
+            await sleep(2000);
+            response = await fetch(result.status_url || `/sku/${encodeURIComponent(sku)}/zip/status`);
+            if (!response.ok) throw new Error("ZIP status failed");
+            result = await response.json();
+            showZipProgress(result.progress);
+          }
+          if (result.state !== "ready") throw new Error(result.error || "ZIP preparation failed");
+          showZipProgress(100, "ready");
+          link.textContent = "Downloading...";
+          downloadInBackground(result.download_url);
+          await sleep(2000);
+        } catch (error) {
+          ring = showZipProgress(0, "error");
+          link.title = error.message;
+          link.textContent = "Retry ZIP";
+          await sleep(3000);
+        } finally {
+          await sleep(800);
+          ring.hidden = true;
+          link.textContent = label;
+          link.dataset.zipBusy = "0";
+          link.removeAttribute("aria-busy");
+        }
+      }
+
+      document.addEventListener("click", (event) => {
+        const link = event.target.closest("[data-zip-sku]");
+        if (!link) return;
+        event.preventDefault();
+        void prepareZip(link);
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,576 @@
+{% extends "base.html" %}
+
+{% macro status_label(status) -%}
+  {%- if status == 'pending' -%}待建议
+  {%- elif status == 'suggested' -%}待确认
+  {%- elif status == 'error' -%}有错误
+  {%- elif status == 'uploaded' -%}已入库
+  {%- elif status == 'rejected' -%}已拒绝
+  {%- else -%}{{ status or '-' }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro status_chip(status) -%}
+  <span class="chip {% if status == 'suggested' %}green{% elif status == 'pending' %}amber{% elif status == 'error' %}red{% elif status == 'uploaded' %}blue{% else %}muted{% endif %}">{{ status_label(status) }}</span>
+{%- endmacro %}
+
+{% macro asset_type_label(asset_type) -%}
+  {%- if asset_type == 'image' -%}图片
+  {%- elif asset_type == 'video' -%}视频
+  {%- elif asset_type == 'kol_ugc' -%}KOL/UGC
+  {%- elif asset_type == 'ads' -%}广告素材
+  {%- elif asset_type == 'other' -%}其他
+  {%- else -%}{{ asset_type }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro icon(name) -%}
+  {% if name == 'inbox' %}
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="m5.45 5.11-3.3 6.6A2 2 0 0 0 2 12.6V19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6.4a2 2 0 0 0-.15-.89l-3.3-6.6A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></svg>
+  {% elif name == 'edit-log' %}
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+  {% elif name == 'history' %}
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+  {% elif name == 'shield' %}
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3v8Z"/></svg>
+  {% elif name == 'sync' %}
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 0-15.2-6.5L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15.2 6.5L21 16"/><path d="M16 16h5v5"/></svg>
+  {% endif %}
+{%- endmacro %}
+
+{% macro preview(item, class_name='admin-thumb') -%}
+  {% set lower_name = item.name|lower %}
+  <div class="{{ class_name }}">
+    {% if lower_name.endswith('.jpg') or lower_name.endswith('.jpeg') or lower_name.endswith('.png') or lower_name.endswith('.webp') or lower_name.endswith('.gif') %}
+    <img src="/admin/nas-imports/{{ item.id }}/preview" alt="{{ item.name }}" loading="lazy" onerror="this.remove();">
+    {% endif %}
+    <span>{{ item.name }}</span>
+  </div>
+{%- endmacro %}
+
+{% macro approval_form(item, class_name='admin-field-grid', actions_class='admin-form-actions wide-field') -%}
+  <form method="post" action="/admin/nas-imports/{{ item.id }}/save" class="{{ class_name }}">
+    <label>SKU
+      <input name="final_sku" value="{{ item.final_sku or item.suggested_sku or '' }}" required>
+    </label>
+    <label>英文品名
+      <input name="final_english_name" value="{{ item.final_english_name or item.suggested_english_name or '' }}" required>
+    </label>
+    <label class="wide-field">目标文件夹
+      <textarea name="final_drive_folder" rows="3" class="path-field" placeholder="04 Product Images/01 Craftsman Golf/..." required>{{ item.final_drive_folder or item.suggested_drive_folder or '' }}</textarea>
+    </label>
+    <label>目标文件名
+      <input name="final_drive_name" value="{{ item.final_drive_name or item.suggested_drive_name or item.name }}" required>
+    </label>
+    <label>素材类型
+      <select name="final_asset_type">
+        {% set selected_type = item.final_asset_type or item.suggested_asset_type or 'image' %}
+        {% for asset_type in asset_types %}
+        <option value="{{ asset_type }}" {% if selected_type == asset_type %}selected{% endif %}>{{ asset_type_label(asset_type) }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="{{ actions_class }}">
+      <button class="button">保存修改</button>
+      <button class="button primary" formaction="/admin/nas-imports/{{ item.id }}/approve">确认入库</button>
+      <button class="button ghost" formaction="/admin/nas-imports/{{ item.id }}/suggest" formnovalidate>生成建议</button>
+      <button class="button ghost danger-button" formaction="/admin/nas-imports/{{ item.id }}/reject" formnovalidate>拒绝</button>
+    </div>
+  </form>
+{%- endmacro %}
+
+{% set pending_total = (nas_counts.get('pending', 0) or 0) + (nas_counts.get('suggested', 0) or 0) + (nas_counts.get('error', 0) or 0) %}
+
+{% block content %}
+<section class="admin-console">
+  <aside class="admin-sidebar" aria-label="后台导航">
+    <div class="admin-sidebar-head">
+      <strong>素材后台</strong>
+      <span>Material Admin</span>
+    </div>
+    <nav class="admin-nav">
+      <a class="{% if active_section == 'pending' %}active{% endif %}" href="/admin?section=pending">
+        {{ icon('inbox') }}
+        <span>待确认</span>
+        <em>{{ pending_total }}</em>
+      </a>
+      <a class="{% if active_section == 'permissions' %}active{% endif %}" href="/admin?section=permissions">
+        {{ icon('shield') }}
+        <span>权限管理</span>
+        <em>{{ rules|length }}</em>
+      </a>
+      <a class="{% if active_section == 'edits' %}active{% endif %}" href="/admin?section=edits">
+        {{ icon('edit-log') }}
+        <span>修改日志</span>
+        <em>{{ edit_log_count }}</em>
+      </a>
+      <a class="{% if active_section == 'history' %}active{% endif %}" href="/admin?section=history">
+        {{ icon('history') }}
+        <span>入库记录</span>
+        <em>{{ nas_counts.get('uploaded', 0) or 0 }}</em>
+      </a>
+      <a class="{% if active_section == 'sync' %}active{% endif %}" href="/admin?section=sync">
+        {{ icon('sync') }}
+        <span>同步导入</span>
+        <em>{{ status.state if status else '-' }}</em>
+      </a>
+    </nav>
+  </aside>
+
+  <main class="admin-workspace">
+    {% if active_section == 'pending' %}
+    <header class="admin-page-head">
+      <div>
+        <h1>待确认素材</h1>
+        <p>逐条核对 Google Drive“临时”目录中的新图，确认后移动到正式素材目录。</p>
+      </div>
+      <form method="post" action="/admin/nas-imports/scan">
+        <button class="button primary">扫描临时目录</button>
+      </form>
+    </header>
+    <section class="bulk-review-layout" data-bulk-review>
+      <form class="bulk-table-panel" method="post" action="/admin/nas-imports/bulk" data-bulk-form>
+        <div class="bulk-toolbar">
+          <div>
+            <strong>待办清单</strong>
+            <span>{{ nas_imports|length }} 条素材 · {{ nas_counts.get('suggested', 0) or 0 }} 条可确认</span>
+          </div>
+          <div class="bulk-counts">
+            <span><b>{{ nas_counts.get('pending', 0) or 0 }}</b> 待建议</span>
+            <span><b>{{ nas_counts.get('suggested', 0) or 0 }}</b> 待确认</span>
+            <span><b>{{ nas_counts.get('error', 0) or 0 }}</b> 错误</span>
+          </div>
+        </div>
+        <div class="bulk-table-tools">
+          <label class="bulk-search">
+            <span>搜索</span>
+            <input type="search" data-bulk-search placeholder="文件名 / SKU / 路径 / 状态">
+          </label>
+          <div class="bulk-selection-actions">
+            <span data-selected-count>已选 0</span>
+            <button type="submit" class="button" name="action" value="suggest" data-bulk-suggest disabled>生成建议</button>
+            <button type="submit" class="button primary" name="action" value="approve" data-bulk-approve disabled>确认入库</button>
+            <button type="button" class="button" data-select-visible>全选当前筛选</button>
+            <button type="button" class="button ghost" data-clear-selection>清空选择</button>
+          </div>
+        </div>
+        <div class="bulk-table" role="table" aria-label="待确认素材">
+          <div class="bulk-row bulk-row-head" role="row">
+            <span class="bulk-select-cell" role="columnheader">
+              <label class="bulk-check">
+                <input type="checkbox" data-select-all aria-label="全选当前筛选">
+                <span></span>
+              </label>
+            </span>
+            <span role="columnheader"><button type="button" class="bulk-sort" data-sort="asset">素材</button></span>
+            <span role="columnheader"><button type="button" class="bulk-sort" data-sort="suggestion">建议</button></span>
+            <span role="columnheader"><button type="button" class="bulk-sort" data-sort="target">目标位置</button></span>
+            <span role="columnheader"><button type="button" class="bulk-sort" data-sort="status">状态</button></span>
+          </div>
+          <div class="bulk-table-body" data-bulk-table-body>
+          {% for item in nas_imports %}
+          {% set row_sku = item.final_sku or item.suggested_sku or '-' %}
+          {% set row_name = item.final_english_name or item.suggested_english_name or '尚未生成建议' %}
+          {% set row_drive_name = item.final_drive_name or item.suggested_drive_name or item.name %}
+          {% set row_drive_folder = item.final_drive_folder or item.suggested_drive_folder or '-' %}
+          {% set row_status = status_label(item.status) %}
+          <div class="bulk-row {% if selected_nas_import and selected_nas_import.id == item.id %}active{% endif %}"
+            role="row"
+            tabindex="0"
+            data-bulk-row
+            data-href="/admin?section=pending&import_id={{ item.id }}"
+            data-search="{{ item.name }} {{ item.rel_path }} {{ row_sku }} {{ row_name }} {{ row_drive_name }} {{ row_drive_folder }} {{ row_status }}"
+            data-asset="{{ item.name }} {{ item.rel_path }}"
+            data-suggestion="{{ row_sku }} {{ row_name }}"
+            data-target="{{ row_drive_name }} {{ row_drive_folder }}"
+            data-status="{{ row_status }}"
+            data-status-code="{{ item.status }}">
+            <span class="bulk-select-cell" role="cell">
+              <label class="bulk-check">
+                <input type="checkbox" name="import_ids" value="{{ item.id }}" data-row-check aria-label="选择 {{ item.name }}">
+                <span></span>
+              </label>
+            </span>
+            <span class="bulk-asset" role="cell">
+              {{ preview(item) }}
+              <span><strong>{{ item.name }}</strong><small>{{ item.rel_path }}</small></span>
+            </span>
+            <span role="cell"><strong>{{ row_sku }}</strong><small>{{ row_name }}</small></span>
+            <span role="cell"><strong>{{ row_drive_name }}</strong><small>{{ row_drive_folder }}</small></span>
+            <span role="cell">{{ status_chip(item.status) }}</span>
+          </div>
+          {% else %}
+          <div class="empty-state compact"><span>暂无待确认素材</span><small>点击右上角“扫描新图片”开始。</small></div>
+          {% endfor %}
+          </div>
+        </div>
+      </form>
+
+      <aside class="bulk-inspector" data-bulk-inspector>
+        {% if selected_nas_import %}
+        <div class="bulk-inspector-preview">
+          {{ preview(selected_nas_import, 'admin-preview-large') }}
+        </div>
+        <div class="bulk-inspector-body">
+          <div class="admin-section-title">
+            <div>
+              <strong>{{ selected_nas_import.name }}</strong>
+              <span>{{ selected_nas_import.rel_path }}</span>
+            </div>
+            {{ status_chip(selected_nas_import.status) }}
+          </div>
+          <dl class="approval-meta">
+            <dt>AI 置信度</dt><dd>{{ selected_nas_import.confidence or '-' }}</dd>
+            <dt>AI 原因</dt><dd>{{ selected_nas_import.reason or '尚未生成建议' }}</dd>
+            {% if selected_nas_import.error %}
+            <dt>错误</dt><dd class="danger">{{ selected_nas_import.error }}</dd>
+            {% endif %}
+          </dl>
+          {{ approval_form(selected_nas_import, 'admin-field-grid single bulk-edit-form', 'admin-form-actions wide-field stacked-actions') }}
+        </div>
+        {% else %}
+        <div class="empty-state"><span>请选择一条素材</span></div>
+        {% endif %}
+      </aside>
+    </section>
+    <script>
+      (() => {
+        const root = document.querySelector('[data-bulk-review]');
+        if (!root) return;
+        const body = root.querySelector('[data-bulk-table-body]');
+        const rows = Array.from(root.querySelectorAll('[data-bulk-row]'));
+        const search = root.querySelector('[data-bulk-search]');
+        const selectAll = root.querySelector('[data-select-all]');
+        const selectedCount = root.querySelector('[data-selected-count]');
+        const bulkForm = root.querySelector('[data-bulk-form]');
+        const bulkSuggest = root.querySelector('[data-bulk-suggest]');
+        const bulkApprove = root.querySelector('[data-bulk-approve]');
+        const selectVisible = root.querySelector('[data-select-visible]');
+        const clearSelection = root.querySelector('[data-clear-selection]');
+        let sortKey = '';
+        let sortDirection = 1;
+        let detailRequest = null;
+
+        const rowCheck = (row) => row.querySelector('[data-row-check]');
+        const visibleRows = () => rows.filter((row) => !row.hidden);
+        const normalize = (value) => (value || '').toString().trim().toLowerCase();
+
+        const syncRow = (row) => {
+          row.classList.toggle('selected', rowCheck(row).checked);
+        };
+
+        const updateSelectionState = () => {
+          const visible = visibleRows();
+          const checkedVisible = visible.filter((row) => rowCheck(row).checked);
+          const checkedAll = rows.filter((row) => rowCheck(row).checked);
+          const approvable = checkedAll.filter((row) => row.dataset.statusCode === 'suggested');
+          selectedCount.textContent = `已选 ${checkedAll.length} · 可入库 ${approvable.length}`;
+          bulkSuggest.disabled = checkedAll.length === 0;
+          bulkSuggest.textContent = checkedAll.length ? `生成建议 (${checkedAll.length})` : '生成建议';
+          bulkApprove.disabled = approvable.length === 0;
+          bulkApprove.textContent = approvable.length ? `确认入库 (${approvable.length})` : '确认入库';
+          selectAll.checked = visible.length > 0 && checkedVisible.length === visible.length;
+          selectAll.indeterminate = checkedVisible.length > 0 && checkedVisible.length < visible.length;
+        };
+
+        const setRowsChecked = (targetRows, checked) => {
+          targetRows.forEach((row) => {
+            rowCheck(row).checked = checked;
+            syncRow(row);
+          });
+          updateSelectionState();
+        };
+
+        const applySearch = () => {
+          const query = normalize(search.value);
+          rows.forEach((row) => {
+            row.hidden = query !== '' && !normalize(row.dataset.search).includes(query);
+          });
+          updateSelectionState();
+        };
+
+        const sortRows = (nextKey) => {
+          sortDirection = sortKey === nextKey ? sortDirection * -1 : 1;
+          sortKey = nextKey;
+          rows.sort((left, right) => {
+            const result = normalize(left.dataset[sortKey]).localeCompare(normalize(right.dataset[sortKey]), 'zh-Hans', { numeric: true });
+            return result * sortDirection;
+          });
+          rows.forEach((row) => body.appendChild(row));
+          root.querySelectorAll('[data-sort]').forEach((button) => {
+            button.dataset.active = button.dataset.sort === sortKey ? (sortDirection === 1 ? 'asc' : 'desc') : '';
+          });
+        };
+
+        const openRow = async (row) => {
+          rows.forEach((item) => item.classList.toggle('active', item === row));
+          const inspector = root.querySelector('[data-bulk-inspector]');
+          if (!inspector) return;
+          if (detailRequest) detailRequest.abort();
+          const controller = new AbortController();
+          detailRequest = controller;
+          inspector.setAttribute('aria-busy', 'true');
+          try {
+            const response = await fetch(row.dataset.href, { signal: controller.signal });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const nextPage = new DOMParser().parseFromString(await response.text(), 'text/html');
+            const nextInspector = nextPage.querySelector('[data-bulk-inspector]');
+            if (!nextInspector) throw new Error('Missing inspector');
+            inspector.replaceWith(nextInspector);
+            history.replaceState(null, '', row.dataset.href);
+          } catch (error) {
+            if (error.name !== 'AbortError') window.location.assign(row.dataset.href);
+          } finally {
+            if (detailRequest === controller) {
+              root.querySelector('[data-bulk-inspector]')?.removeAttribute('aria-busy');
+            }
+          }
+        };
+
+        search.addEventListener('input', applySearch);
+        selectAll.addEventListener('change', () => setRowsChecked(visibleRows(), selectAll.checked));
+        selectVisible.addEventListener('click', () => setRowsChecked(visibleRows(), true));
+        clearSelection.addEventListener('click', () => setRowsChecked(rows, false));
+        bulkForm.addEventListener('submit', (event) => {
+          if (bulkForm.dataset.submitting) {
+            event.preventDefault();
+            return;
+          }
+          bulkForm.dataset.submitting = 'true';
+          const submitter = event.submitter;
+          if (submitter) submitter.textContent = submitter.value === 'approve' ? '正在入库…' : '正在生成…';
+        });
+        root.querySelectorAll('[data-sort]').forEach((button) => {
+          button.addEventListener('click', () => sortRows(button.dataset.sort));
+        });
+        rows.forEach((row) => {
+          rowCheck(row).addEventListener('change', () => {
+            syncRow(row);
+            updateSelectionState();
+          });
+          row.addEventListener('click', (event) => {
+            if (event.target.closest('input, button, label, select, textarea')) return;
+            void openRow(row);
+          });
+          row.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.target.closest('input, button, label, select, textarea')) {
+              event.preventDefault();
+              void openRow(row);
+            }
+          });
+        });
+        updateSelectionState();
+      })();
+    </script>
+
+    {% elif active_section == 'edits' %}
+    <header class="admin-page-head">
+      <div>
+        <h1>修改日志</h1>
+        <p>目录、英文品名与文件名的人工修正记录。</p>
+      </div>
+    </header>
+    <section class="admin-card">
+      <div class="admin-section-title"><strong>人工修正</strong><span>{{ edit_log_count }} 条</span></div>
+      <div class="admin-table wide">
+        <table>
+          <thead><tr><th>时间</th><th>素材</th><th>修改项</th><th>AI 建议</th><th>修改前</th><th>修改后</th><th>操作人</th></tr></thead>
+          <tbody>
+            {% for item in edit_logs %}
+            <tr>
+              <td>{{ item.created_at }}</td>
+              <td><strong>{{ item.source_name }}</strong><small class="table-subline">{{ item.rel_path }}</small></td>
+              <td>{{ edit_field_labels.get(item.field, item.field) }}</td>
+              <td>{{ item.suggested_value or '-' }}</td>
+              <td>{{ item.previous_value or '-' }}</td>
+              <td>{{ item.new_value }}</td>
+              <td>{{ item.editor or '-' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty">暂无人工修改记录</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {% elif active_section == 'history' %}
+    <header class="admin-page-head">
+      <div>
+        <h1>入库记录</h1>
+        <p>已确认进入正式素材目录的文件记录。</p>
+      </div>
+    </header>
+    <section class="admin-card">
+      <div class="admin-section-title"><strong>已入库素材</strong><span>{{ nas_counts.get('uploaded', 0) or 0 }} 条</span></div>
+      <div class="admin-table wide">
+        <table>
+          <thead><tr><th>入库时间</th><th>原始素材</th><th>SKU</th><th>英文品名</th><th>目标目录</th><th>文件名</th><th>操作人</th></tr></thead>
+          <tbody>
+            {% for item in upload_history %}
+            <tr>
+              <td>{{ item.approved_at or '-' }}</td>
+              <td><strong>{{ item.name }}</strong><small class="table-subline">{{ item.rel_path }}</small></td>
+              <td>{{ item.final_sku or '-' }}</td>
+              <td>{{ item.final_english_name or '-' }}</td>
+              <td>{{ item.final_drive_folder or '-' }}</td>
+              <td>{{ item.final_drive_name or '-' }}</td>
+              <td>{{ item.approver or '-' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty">暂无入库记录</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {% elif active_section == 'permissions' %}
+    <header class="admin-page-head">
+      <div>
+        <h1>权限管理</h1>
+        <p>管理账号角色，并按 SKU、品牌、分类、Other 或素材类型隐藏内容。</p>
+      </div>
+    </header>
+
+    <section class="admin-two-column">
+      <div class="admin-card">
+        <div class="admin-section-title"><strong>创建账号</strong><span>{{ users|length }} 个账号</span></div>
+        <form method="post" action="/admin/users" class="admin-field-grid single">
+          <label>邮箱<input name="email" type="email" required></label>
+          <label>姓名<input name="name"></label>
+          <label>角色
+            <select name="role">
+              {% for option in role_options %}
+              <option value="{{ option.value }}">{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>密码<input name="password" type="password" required></label>
+          <button class="button primary">创建账号</button>
+        </form>
+      </div>
+
+      <div class="admin-card">
+        <div class="admin-section-title"><strong>添加隐藏规则</strong><span>{{ rules|length }} 条规则</span></div>
+        <form method="post" action="/admin/role-rules" class="admin-field-grid single">
+          <label>角色
+            <select name="role">
+              {% for option in permission_roles %}
+              <option value="{{ option.value }}">{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>隐藏方式
+            <select name="scope" id="permission-rule-scope">
+              {% for option in rule_scopes %}
+              <option value="{{ option.value }}">{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>规则值
+            <select name="value" id="permission-rule-select" required disabled hidden></select>
+            <input name="value" id="permission-rule-input" placeholder="输入 SKU" required>
+          </label>
+          <button class="button primary">添加规则</button>
+        </form>
+      </div>
+    </section>
+
+    <script type="application/json" id="permission-rule-options">{{ permission_values|tojson }}</script>
+    <script>
+      (() => {
+        const scope = document.querySelector("#permission-rule-scope");
+        const select = document.querySelector("#permission-rule-select");
+        const input = document.querySelector("#permission-rule-input");
+        const values = JSON.parse(document.querySelector("#permission-rule-options").textContent);
+        const labels = { image: "图片", video: "视频", kol_ugc: "KOL/UGC", ads: "广告素材", other: "其他" };
+        const syncValueControl = () => {
+          const manual = scope.value === "sku";
+          input.hidden = !manual;
+          input.disabled = !manual;
+          select.hidden = manual;
+          select.disabled = manual;
+          if (manual) return;
+          const placeholder = new Option("请选择", "", true, true);
+          placeholder.disabled = true;
+          select.replaceChildren(placeholder, ...(values[scope.value] || []).map((value) => new Option(labels[value] || value, value)));
+        };
+        scope.addEventListener("change", syncValueControl);
+        syncValueControl();
+      })();
+    </script>
+
+    <section class="admin-card">
+      <div class="admin-section-title"><strong>隐藏规则</strong><span>{{ rules|length }} 条</span></div>
+      <div class="admin-table">
+        <table>
+          <thead><tr><th>角色</th><th>隐藏方式</th><th>规则值</th><th>创建时间</th><th></th></tr></thead>
+          <tbody>
+            {% for rule in rules %}
+            <tr>
+              <td>{{ role_label(rule.role) }}</td>
+              <td>{{ rule_scope_label(rule.scope) }}</td>
+              <td>{{ rule.value }}</td>
+              <td>{{ rule.created_at }}</td>
+              <td>
+                <form method="post" action="/admin/role-rules/{{ rule.id }}/delete">
+                  <button class="button ghost danger-button">删除</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty">暂无隐藏规则</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="admin-card">
+      <div class="admin-section-title"><strong>账号列表</strong><span>{{ users|length }} 个</span></div>
+      <div class="admin-table">
+        <table>
+          <thead><tr><th>邮箱</th><th>姓名</th><th>角色</th><th>创建时间</th></tr></thead>
+          <tbody>
+            {% for item in users %}
+            <tr><td>{{ item.email }}</td><td>{{ item.name }}</td><td>{{ role_label(item.role) }}</td><td>{{ item.created_at }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {% else %}
+    <header class="admin-page-head">
+      <div>
+        <h1>同步导入</h1>
+        <p>刷新 Drive 索引、扫描“临时”目录，或导入 CSV 映射。</p>
+      </div>
+    </header>
+    <section class="admin-two-column">
+      <div class="admin-card">
+        <div class="admin-section-title"><strong>Drive 索引</strong><span>{{ status.state if status else '-' }}</span></div>
+        <dl class="approval-meta">
+          <dt>根目录</dt><dd>{{ status.root_id if status and status.root_id else '-' }}</dd>
+          <dt>文件数</dt><dd>{{ status.file_count if status else 0 }}</dd>
+          <dt>开始时间</dt><dd>{{ status.started_at if status and status.started_at else '-' }}</dd>
+          <dt>完成时间</dt><dd>{{ status.finished_at if status and status.finished_at else '-' }}</dd>
+        </dl>
+        <form method="post" action="/admin/sync"><button class="button primary">同步 Drive 索引</button></form>
+      </div>
+      <div class="admin-card">
+        <div class="admin-section-title"><strong>临时目录 / CSV</strong><span>导入工具</span></div>
+        <div class="admin-sync-actions">
+          <form method="post" action="/admin/nas-imports/scan"><button class="button primary wide">扫描临时目录</button></form>
+          <form method="post" action="/admin/import-csv" enctype="multipart/form-data" class="stack">
+            <input type="file" name="file" accept=".csv" required>
+            <button class="button wide">导入 CSV 映射</button>
+          </form>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+  </main>
+</section>
+{% endblock %}

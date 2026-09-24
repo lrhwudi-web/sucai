@@ -1,0 +1,10 @@
+import { ClockCounterClockwise, PencilSimple } from "@phosphor-icons/react";
+import type { EditLog, UploadRecord } from "./types";
+
+export function EditLogPanel({ logs }: { logs: EditLog[] }) {
+  return <section className="admin-section"><header className="admin-page-heading"><div><span className="eyebrow">Audit trail</span><h1>修改日志</h1><p>追踪人工修正的字段、修改前后内容与操作人。</p></div></header><div className="admin-content-card"><div className="admin-card-heading"><div><PencilSimple size={20} weight="duotone" /><span><strong>人工修正</strong><small>最近 30 天</small></span></div><em>{logs.length} 条</em></div><div className="admin-data-table edit-table"><div className="admin-table-row is-head"><span>素材</span><span>字段</span><span>修改前</span><span>修改后</span><span>操作人</span><span>时间</span></div>{logs.map((log) => <div className="admin-table-row" key={log.id}><span><b>{log.material}</b></span><span>{log.field}</span><span className="before-value">{log.before}</span><span className="after-value">{log.after}</span><span>{log.editor}</span><span>{log.createdAt}</span></div>)}</div></div></section>;
+}
+
+export function UploadHistoryPanel({ records }: { records: UploadRecord[] }) {
+  return <section className="admin-section"><header className="admin-page-heading"><div><span className="eyebrow">Archive history</span><h1>入库记录</h1><p>查看已确认素材的目标目录、操作人和入库时间。</p></div></header><div className="admin-content-card"><div className="admin-card-heading"><div><ClockCounterClockwise size={20} weight="duotone" /><span><strong>最近入库</strong><small>按入库时间倒序</small></span></div><em>{records.length} 条</em></div><div className="admin-data-table history-table"><div className="admin-table-row is-head"><span>素材</span><span>SKU</span><span>目标位置</span><span>操作人</span><span>入库时间</span></div>{records.map((record) => <div className="admin-table-row" key={record.id}><span className="history-asset"><img src={record.thumbnailUrl} alt="" /><b>{record.name}</b></span><span><code>{record.sku}</code></span><span>{record.destination}</span><span>{record.operator}</span><span>{record.createdAt}</span></div>)}</div></div></section>;
+}

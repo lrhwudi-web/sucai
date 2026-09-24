@@ -1,0 +1,83 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+from app import db, main
+
+
+class UserActivityTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "activity.db")
+        db.init_db(self.conn)
+        db.create_user(self.conn, "customer@example.com", "Customer", "overseas_customer", "password123")
+        self.user = self.conn.execute("SELECT * FROM users WHERE email='customer@example.com'").fetchone()
+        self.conn.execute(
+            """
+            INSERT INTO files(id, name, mime_type, size, modified_time, path, sku, brand, category, asset_type, internal_only)
+            VALUES ('file-1', '6012001 Front.jpg', 'image/jpeg', 12, '',
+                    '04 Product Images/01 Craftsman Golf/03 Driver Cover/6012001 Driver Cover/6012001 Front.jpg',
+                    '6012001', '01 Craftsman Golf', '03 Driver Cover', 'image', 0)
+            """
+        )
+        self.conn.commit()
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_activity_monitor_aggregates_login_original_download_and_drive_export(self):
+        db.record_user_activity(self.conn, self.user["id"], "login", detail="password")
+        db.record_user_activity(
+            self.conn,
+            self.user["id"],
+            "original_open",
+            sku="6012001",
+            file_id="file-1",
+            file_name="6012001 Front.jpg",
+        )
+        db.record_user_activity(
+            self.conn,
+            self.user["id"],
+            "download",
+            sku="6012001",
+            file_id="file-1",
+            file_name="6012001 Front.jpg",
+        )
+        db.record_user_activity(self.conn, self.user["id"], "drive_export", sku="6012001")
+
+        overview = db.user_monitor_overview(self.conn)
+        monitored = next(item for item in overview["users"] if item["id"] == self.user["id"])
+        self.assertEqual(monitored["login_count"], 1)
+        self.assertEqual(monitored["original_open_count"], 1)
+        self.assertEqual(monitored["download_count"], 2)
+        self.assertTrue(monitored["last_login_at"])
+        self.assertEqual(overview["stats"]["events"], 4)
+
+        detail = db.user_activity_detail(self.conn, self.user["id"])
+        self.assertEqual(
+            [event["event_type"] for event in detail["events"]],
+            ["drive_export", "download", "original_open", "login"],
+        )
+
+    def test_original_open_endpoint_checks_visibility_before_recording(self):
+        original_connect = db.connect
+        db.connect = lambda *_args, **_kwargs: self.conn
+        try:
+            result = main.api_record_original_open(
+                sku="6012001",
+                file_id="file-1",
+                user=self.user,
+            )
+        finally:
+            db.connect = original_connect
+        self.assertTrue(result["recorded"])
+        event = self.conn.execute(
+            "SELECT * FROM user_activity_events WHERE user_id=? AND event_type='original_open'",
+            (self.user["id"],),
+        ).fetchone()
+        self.assertEqual(event["file_id"], "file-1")
+
+
+if __name__ == "__main__":
+    unittest.main()

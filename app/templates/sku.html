@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="sku-gallery-layout">
+  <aside class="detail-panel sku-side">
+    <div class="sku-title">
+      <strong>{{ sku }}</strong>
+      <span>SKU asset package</span>
+    </div>
+    {% if primary %}
+    <div class="hero-preview">
+      <div class="big-img">
+        {% if primary.mime_type.startswith('image/') %}
+        <span class="deferred-preview hero-lazy-preview" data-load-preview data-src="/thumb/{{ primary.id }}?variant=drawer" data-full="/media/{{ primary.id }}" data-name="{{ primary.name }}">
+          <span>Loading preview</span>
+        </span>
+        {% elif primary.mime_type.startswith('video/') %}
+        <a class="deferred-preview video-preview hero-video-preview" href="/media/{{ primary.id }}" target="_blank" rel="noopener" data-load-preview data-video-src="/media/{{ primary.id }}" data-name="{{ primary.name }}">
+          <span>Open video</span>
+        </a>
+        {% elif primary.mime_type.startswith('application/pdf') %}
+        <a class="filebox" href="/media/{{ primary.id }}" target="_blank" rel="noopener">Open PDF</a>
+        {% else %}
+        <span class="filebox">Preview</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    <div class="info-list">
+      <div class="info-row"><span>English name</span><span>{{ product.name }}</span></div>
+      <div class="info-row"><span>Brand</span><span>{{ product.brand or '-' }}</span></div>
+      <div class="info-row"><span>Product type</span><span>{{ product.category or '-' }}</span></div>
+      {% if product.other %}<div class="info-row"><span>Other</span><span>{{ product.other }}</span></div>{% endif %}
+      <div class="info-row"><span>SKU</span><span>{{ product.sku }}</span></div>
+      <div class="info-row"><span>Images</span><span>{{ stats.images }}</span></div>
+      <div class="info-row"><span>Videos</span><span>{{ stats.videos }}</span></div>
+      {% if meta %}
+      <div class="info-row"><span>Owner</span><span>{{ meta.owner or '-' }}</span></div>
+      <div class="info-row"><span>Notes</span><span>{{ meta.notes or '-' }}</span></div>
+      {% endif %}
+    </div>
+    <a class="button primary wide" href="/sku/{{ sku }}/zip" data-zip-sku="{{ sku }}">Download SKU ZIP</a>
+    <a class="button wide" href="/">Back to browse</a>
+  </aside>
+
+  <section class="main-pane">
+    <div class="gallery-wrap">
+      <div class="asset-gallery">
+        {% for file in files %}
+        <article class="asset-tile">
+          <div class="asset-preview">
+            {% if file.mime_type.startswith('image/') %}
+            <span class="deferred-preview" data-load-preview data-src="/thumb/{{ file.id }}?variant=small" data-full="/media/{{ file.id }}" data-name="{{ file.name }}">
+              <span>Loading preview</span>
+            </span>
+            {% elif file.mime_type.startswith('video/') %}
+            <a class="deferred-preview video-preview" href="/media/{{ file.id }}" target="_blank" rel="noopener" data-load-preview data-video-src="/media/{{ file.id }}" data-name="{{ file.name }}">
+              <span>Video preview</span>
+            </a>
+            {% elif file.mime_type.startswith('application/pdf') %}
+            <a class="filebox" href="/media/{{ file.id }}" target="_blank" rel="noopener">PDF document</a>
+            {% endif %}
+          </div>
+          <div class="asset-tile-body">
+            <div class="card-actions">
+              <a class="button" href="/media/{{ file.id }}" target="_blank">Preview</a>
+              <a class="button primary" href="/download/{{ file.id }}">Download</a>
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      <script>
+        (() => {
+          function playLabel(text) {
+            const label = document.createElement("span");
+            label.className = "video-play-label";
+            label.textContent = text;
+            return label;
+          }
+
+          function showVideoFrame(node) {
+            const src = node.dataset.videoSrc || node.href;
+            if (!src) return;
+            const video = document.createElement("video");
+            video.muted = true;
+            video.playsInline = true;
+            video.preload = "metadata";
+            video.controls = false;
+            video.disablePictureInPicture = true;
+            video.src = src + "#t=0.1";
+            video.addEventListener("loadeddata", () => video.pause(), { once: true });
+            video.addEventListener("error", () => node.replaceChildren(playLabel("Open video")), { once: true });
+            node.replaceChildren(video, playLabel("Play"));
+          }
+
+          function loadPreview(node) {
+            if (!node || node.dataset.loaded) return;
+            node.dataset.loaded = "1";
+            if (node.classList.contains("video-preview")) {
+              showVideoFrame(node);
+              return;
+            }
+            if (!node.dataset.src) return;
+            const img = new Image();
+            img.alt = node.dataset.name || "";
+            img.loading = "lazy";
+            img.decoding = "async";
+            img.setAttribute("fetchpriority", "low");
+            img.dataset.full = node.dataset.full || "";
+            img.onerror = function () {
+              if (this.dataset.full) {
+                this.src = this.dataset.full;
+                this.removeAttribute("data-full");
+              }
+            };
+            img.src = node.dataset.src;
+            node.replaceWith(img);
+          }
+
+          const previews = document.querySelectorAll("[data-load-preview]");
+          if (!("IntersectionObserver" in window)) {
+            previews.forEach(loadPreview);
+            return;
+          }
+          const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return;
+              observer.unobserve(entry.target);
+              loadPreview(entry.target);
+            });
+          }, { rootMargin: "520px 0px" });
+          previews.forEach((node) => observer.observe(node));
+        })();
+      </script>
+    </div>
+  </section>
+</section>
+{% endblock %}

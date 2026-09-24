@@ -1,0 +1,272 @@
+{
+  "version": "1.0.0",
+  "normalization": "Unicode NFKC + lowercase + whitespace collapse",
+  "rules": [
+    {
+      "id": "plush_cover",
+      "priority": 1100,
+      "category_id": "HC_PLUSH",
+      "patterns_any": ["毛绒", "动物帽套", "\\bplush\\b", "stuffed"],
+      "confidence": 0.99,
+      "reason": "Plush and animal headcovers use the dedicated Plush Covers category."
+    },
+    {
+      "id": "putter_oz1i_hs",
+      "priority": 1000,
+      "category_id": "HC_PUTTER_MALLET_SMALL",
+      "patterns_any": ["oz\\s*[._-]?\\s*1i\\s*hs"],
+      "confidence": 0.99,
+      "reason": "OZ.1i HS 固定归入小半圆推杆套"
+    },
+    {
+      "id": "putter_df21",
+      "priority": 990,
+      "category_id": "HC_PUTTER_MALLET_LARGE",
+      "patterns_any": ["df\\s*2[._-]?\\s*1"],
+      "confidence": 0.99,
+      "reason": "DF2.1 固定归入大半圆推杆套"
+    },
+    {
+      "id": "putter_df3",
+      "priority": 980,
+      "category_id": "HC_PUTTER_MALLET_LARGE",
+      "patterns_any": ["\\bdf\\s*3\\b"],
+      "confidence": 0.99,
+      "reason": "DF3 固定归入大半圆推杆套"
+    },
+    {
+      "id": "putter_oz1",
+      "priority": 970,
+      "category_id": "HC_PUTTER_MALLET_SMALL",
+      "patterns_any": ["oz\\s*[._-]?\\s*1"],
+      "confidence": 0.99,
+      "reason": "OZ.1 固定归入小半圆推杆套"
+    },
+    {
+      "id": "putter_square",
+      "priority": 930,
+      "category_id": "HC_PUTTER_SQUARE",
+      "patterns_any": ["方形.*(?:推杆|帽)套", "方块.*(?:推杆|帽)套", "小方块.*帽套", "square\\s+(?:mallet\\s+)?putter\\s+cover"],
+      "confidence": 0.98,
+      "reason": "名称明确包含方形/方块/Square"
+    },
+    {
+      "id": "putter_small_mallet",
+      "priority": 920,
+      "category_id": "HC_PUTTER_MALLET_SMALL",
+      "patterns_any": ["小半圆.*(?:推杆|帽)套", "mid[-\\s]?mallet\\s+putter\\s+cover"],
+      "confidence": 0.98,
+      "reason": "名称明确包含小半圆或 Mid-Mallet"
+    },
+    {
+      "id": "putter_large_mallet_explicit",
+      "priority": 910,
+      "category_id": "HC_PUTTER_MALLET_LARGE",
+      "patterns_any": ["大半圆.*(?:推杆|帽)套", "大半圆.*帽套"],
+      "confidence": 0.98,
+      "reason": "中文名称明确包含大半圆"
+    },
+    {
+      "id": "putter_blade",
+      "priority": 900,
+      "category_id": "HC_PUTTER_BLADE",
+      "patterns_any": ["直条.*推杆", "blade\\s+putter\\s+cover"],
+      "confidence": 0.98,
+      "reason": "名称明确包含直条或 Blade"
+    },
+    {
+      "id": "putter_large_mallet_generic",
+      "priority": 820,
+      "category_id": "HC_PUTTER_MALLET_LARGE",
+      "patterns_any": ["\\bmallet\\s+putter\\s+cover\\b"],
+      "patterns_none": ["mid[-\\s]?mallet", "square", "df\\s*3", "df\\s*2[._-]?\\s*1", "oz\\s*[._-]?\\s*1"],
+      "confidence": 0.82,
+      "requires_review": true,
+      "reason": "仅由通用英文 Mallet 推断，必须人工复核"
+    },
+    {
+      "id": "driver_cover",
+      "priority": 800,
+      "category_id": "HC_DRIVER",
+      "patterns_any": ["一号木[^|]{0,16}帽套", "1号木[^|]{0,16}帽套", "1号木杆套", "\\bdriver\\s+(?:head)?cover\\b"],
+      "confidence": 0.98,
+      "reason": "识别到一号木/Driver"
+    },
+    {
+      "id": "fairway_cover",
+      "priority": 790,
+      "category_id": "HC_FAIRWAY",
+      "patterns_any": ["球道木[^|]{0,16}(?:帽|杆)套", "球道木杆套", "\\bfairway\\s+(?:wood\\s+)?cover\\b", "\\b[357]\\s*wood\\s+cover\\b"],
+      "confidence": 0.97,
+      "reason": "识别到球道木/Fairway"
+    },
+    {
+      "id": "hybrid_cover",
+      "priority": 780,
+      "category_id": "HC_HYBRID",
+      "patterns_any": ["混合木[^|]{0,16}帽套", "混合木杆套", "\\bhybrid\\s+cover\\b"],
+      "confidence": 0.98,
+      "reason": "识别到混合木/Hybrid"
+    },
+    {
+      "id": "iron_cover",
+      "priority": 770,
+      "category_id": "HC_IRON",
+      "patterns_any": ["铁杆套", "iron\\s+cover"],
+      "patterns_none": ["沙杆套", "wedge"],
+      "confidence": 0.98,
+      "reason": "识别到铁杆套"
+    },
+    {
+      "id": "wedge_cover",
+      "priority": 775,
+      "category_id": "HC_WEDGE",
+      "patterns_any": ["沙杆套", "挖起杆套", "wedge\\s+cover", "sand\\s+wedge\\s+cover"],
+      "confidence": 0.98,
+      "reason": "识别到沙杆/挖起杆套"
+    },
+    {
+      "id": "alignment_cover",
+      "priority": 760,
+      "category_id": "HC_ALIGNMENT",
+      "patterns_any": ["方向棒套", "方向杆套", "alignment\\s+stick\\s+cover"],
+      "confidence": 0.98,
+      "reason": "识别到方向棒套"
+    },
+    {
+      "id": "headcover_set",
+      "priority": 750,
+      "category_id": "ACC_OTHER",
+      "patterns_any": ["杆套套装", "帽套套装", "headcover\\s+set"],
+      "confidence": 0.97,
+      "reason": "识别到杆套套装"
+    },
+    {
+      "id": "divot_marker",
+      "priority": 700,
+      "category_id": "ACC_DIVOT_MARKER",
+      "patterns_any": ["果岭叉", "果岭修复叉", "马克", "球标", "divot\\s+tool", "ball\\s+marker"],
+      "confidence": 0.96,
+      "reason": "识别到果岭叉或马克"
+    },
+    {
+      "id": "scorebook",
+      "priority": 690,
+      "category_id": "ACC_SCOREBOOK",
+      "patterns_any": ["记分本", "计分本", "积分本", "记分卡套", "score(?:card)?\\s*(?:book|holder)"],
+      "confidence": 0.97,
+      "reason": "识别到记分本/计分本"
+    },
+    {
+      "id": "golf_towel",
+      "priority": 680,
+      "category_id": "ACC_TOWEL",
+      "patterns_any": ["高尔夫毛巾", "(?<!帽)毛巾", "golf\\s+towel"],
+      "confidence": 0.97,
+      "reason": "识别到高尔夫毛巾"
+    },
+    {
+      "id": "ball_tee_pouch",
+      "priority": 670,
+      "category_id": "ACC_BALL_TEE_POUCH",
+      "patterns_any": ["装球袋", "球钉.*(?:袋|包)", "球.*球钉.*(?:袋|包)", "ball\\s+(?:and\\s+tee\\s+)?pouch", "golf\\s+ball\\s+(?:bag|pouch)"],
+      "confidence": 0.96,
+      "reason": "名称明确表示装球或球钉收纳"
+    },
+    {
+      "id": "valuables_pouch",
+      "priority": 660,
+      "category_id": "ACC_VALUABLES_POUCH",
+      "patterns_any": ["贵重物品.*(?:袋|包)", "什物袋", "杂物袋", "valuables?\\s+pouch", "golf\\s+pouch"],
+      "patterns_none": ["装球袋", "ball\\s+pouch", "清洁袋"],
+      "confidence": 0.94,
+      "requires_review": true,
+      "reason": "识别到什物袋/贵重物品袋；复核是否实际为装球袋"
+    },
+    {
+      "id": "glove_case",
+      "priority": 650,
+      "category_id": "ACC_GLOVE_CASE",
+      "patterns_any": ["手套包", "手套袋", "手套.*收纳盒", "glove\\s+(?:bag|pouch|case|holder)"],
+      "confidence": 0.97,
+      "reason": "识别到手套包"
+    },
+    {
+      "id": "rangefinder_case",
+      "priority": 640,
+      "category_id": "ACC_RANGEFINDER_CASE",
+      "patterns_any": ["测距仪(?:包|袋|盒)", "rangefinder\\s+(?:bag|pouch|case)"],
+      "confidence": 0.97,
+      "reason": "识别到测距仪包"
+    },
+    {
+      "id": "golf_bag_strap",
+      "priority": 635,
+      "category_id": "ACC_OTHER",
+      "patterns_any": ["球包带", "球包[^|]{0,12}肩带", "golf\\s+bag\\s+(?:shoulder\\s+)?strap"],
+      "confidence": 0.98,
+      "reason": "识别到球包带"
+    },
+    {
+      "id": "golf_bag",
+      "priority": 630,
+      "category_id": "ACC_OTHER",
+      "patterns_any": ["高尔夫球包", "(?<!装)球包", "golf\\s+bag"],
+      "patterns_none": ["球包带", "装球包"],
+      "confidence": 0.96,
+      "reason": "识别到高尔夫球包"
+    },
+    {
+      "id": "cart_charger",
+      "priority": 625,
+      "category_id": "ACC_OTHER",
+      "patterns_any": ["球车充电器", "golf\\s+cart\\s+charger"],
+      "confidence": 0.99,
+      "reason": "识别到高尔夫球车充电器"
+    },
+    {
+      "id": "golf_cart_accessory",
+      "priority": 620,
+      "category_id": "ACC_OTHER",
+      "patterns_any": ["球车用品", "球车用", "golf\\s+cart"],
+      "patterns_none": ["充电器", "charger"],
+      "confidence": 0.92,
+      "requires_review": true,
+      "reason": "识别到球车用品"
+    },
+    {
+      "id": "golf_glove",
+      "priority": 610,
+      "category_id": "ACC_OTHER",
+      "patterns_any": ["高尔夫手套", "\\bgolf\\s+glove\\b"],
+      "patterns_none": ["手套包", "glove\\s+(?:bag|pouch|case|holder)"],
+      "confidence": 0.97,
+      "reason": "识别到高尔夫手套"
+    },
+    {
+      "id": "pickleball_cover",
+      "priority": 600,
+      "category_id": "ACC_OTHER",
+      "patterns_any": ["匹克球拍套", "pickleball\\s+paddle\\s+cover"],
+      "confidence": 0.98,
+      "reason": "识别到匹克球拍套"
+    },
+    {
+      "id": "hat",
+      "priority": 590,
+      "category_id": "ACC_OTHER",
+      "patterns_any": ["棒球帽", "平板帽", "毛线.*帽子", "\\b(?:baseball|knit|flat)\\s+hat\\b"],
+      "confidence": 0.95,
+      "reason": "识别到帽子"
+    },
+    {
+      "id": "apparel",
+      "priority": 580,
+      "category_id": "ACC_OTHER",
+      "patterns_any": ["服饰", "\\bapparel\\b"],
+      "confidence": 0.90,
+      "requires_review": true,
+      "reason": "识别到服饰大类"
+    }
+  ]
+}
