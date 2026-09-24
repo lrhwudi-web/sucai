@@ -567,6 +567,14 @@ def init_db(conn: sqlite3.Connection) -> None:
           ON catalog_events(event_type, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_catalog_events_user_created
           ON catalog_events(user_id, created_at DESC);
+        CREATE TABLE IF NOT EXISTS customer_catalog_share_copies (
+          id INTEGER PRIMARY KEY,
+          customer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          copied_by_user_id INTEGER NOT NULL REFERENCES users(id),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_customer_catalog_share_customer
+          ON customer_catalog_share_copies(customer_user_id, created_at DESC);
         CREATE TABLE IF NOT EXISTS customer_account_renewals (
           id INTEGER PRIMARY KEY,
           customer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1447,6 +1455,52 @@ def list_customer_users(conn: sqlite3.Connection, created_by_user_id: int | None
         FROM users
         LEFT JOIN user_permission_profiles profiles ON profiles.user_id=users.id
         LEFT JOIN users creators ON creators.id=users.created_by_user_id
+        WHERE users.role IN ({placeholders})
+          AND (? IS NULL OR users.created_by_user_id=?)
+        ORDER BY users.id DESC
+        """,
+        (*CUSTOMER_ACCOUNT_ROLES, created_by_user_id, created_by_user_id),
+    ).fetchall()
+
+
+def record_customer_catalog_share_copy(conn: sqlite3.Connection, customer_user_id: int, copied_by_user_id: int) -> None:
+    with conn:
+        conn.execute(
+            "INSERT INTO customer_catalog_share_copies(customer_user_id, copied_by_user_id) VALUES (?, ?)",
+            (int(customer_user_id), int(copied_by_user_id)),
+        )
+
+
+def customer_catalog_engagement(conn: sqlite3.Connection, created_by_user_id: int | None = None) -> list[sqlite3.Row]:
+    placeholders = ",".join("?" for _ in CUSTOMER_ACCOUNT_ROLES)
+    return conn.execute(
+        f"""
+        SELECT users.id AS user_id,
+               COALESCE(shares.share_copies, 0) AS share_copies,
+               shares.last_share_copy_at,
+               COALESCE(events.catalog_views, 0) AS catalog_views,
+               events.last_catalog_view_at,
+               COALESCE(events.product_adds, 0) AS product_adds,
+               events.last_product_add_at,
+               COALESCE(orders.order_count, 0) AS order_count,
+               orders.last_order_at
+        FROM users
+        LEFT JOIN (
+          SELECT customer_user_id, COUNT(*) AS share_copies, MAX(created_at) AS last_share_copy_at
+          FROM customer_catalog_share_copies GROUP BY customer_user_id
+        ) shares ON shares.customer_user_id=users.id
+        LEFT JOIN (
+          SELECT user_id,
+                 SUM(CASE WHEN event_type='catalog_view' THEN 1 ELSE 0 END) AS catalog_views,
+                 MAX(CASE WHEN event_type='catalog_view' THEN created_at END) AS last_catalog_view_at,
+                 SUM(CASE WHEN event_type='product_added' THEN 1 ELSE 0 END) AS product_adds,
+                 MAX(CASE WHEN event_type='product_added' THEN created_at END) AS last_product_add_at
+          FROM catalog_events GROUP BY user_id
+        ) events ON events.user_id=users.id
+        LEFT JOIN (
+          SELECT customer_user_id, COUNT(*) AS order_count, MAX(created_at) AS last_order_at
+          FROM customer_orders GROUP BY customer_user_id
+        ) orders ON orders.customer_user_id=users.id
         WHERE users.role IN ({placeholders})
           AND (? IS NULL OR users.created_by_user_id=?)
         ORDER BY users.id DESC

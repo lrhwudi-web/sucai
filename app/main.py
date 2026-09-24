@@ -3002,6 +3002,7 @@ def api_admin_access_control(user=Depends(require_api_admin)):
         owner_id = None if user["role"] == "super_admin" else int(user["id"])
         return {
             "users": [dict(row) for row in db.list_customer_users(conn, owner_id)],
+            "engagement": [dict(row) for row in db.customer_catalog_engagement(conn, owner_id)],
             "salespeople": [dict(row) for row in db.list_salespeople(conn)] if user["role"] == "super_admin" else [],
             "rules": [dict(row) for row in db.list_role_rules(conn)],
             "user_grants": [dict(row) for row in db.list_user_grants(conn, owner_id)],
@@ -3009,6 +3010,20 @@ def api_admin_access_control(user=Depends(require_api_admin)):
             "role_labels": ROLE_LABELS,
             "scope_labels": RULE_SCOPE_LABELS,
         }
+
+
+@app.post("/api/admin/users/{user_id}/catalog-share-copy")
+def api_admin_record_catalog_share_copy(user_id: int, user=Depends(require_api_admin)):
+    with db.connect() as conn:
+        db.init_db(conn)
+        owner_id = None if user["role"] == "super_admin" else int(user["id"])
+        customer = next((row for row in db.list_customer_users(conn, owner_id) if row["id"] == user_id), None)
+        if customer is None:
+            raise HTTPException(404, "客户账号不存在或无权访问")
+        if customer["disabled"]:
+            raise HTTPException(409, "客户账号已停用，请先续期或启用")
+        db.record_customer_catalog_share_copy(conn, user_id, int(user["id"]))
+    return {"recorded": True}
 
 
 @app.post("/api/admin/users")

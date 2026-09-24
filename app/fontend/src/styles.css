@@ -13685,6 +13685,12 @@ body {
   gap: 12px;
 }
 
+.customer-account-cell > span { min-width: 0; }
+.customer-follow-up { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#78847a;font-size:11px;font-style:normal; }
+.customer-follow-up.is-interest { color:#a55d1e; }
+.customer-follow-up.is-viewed,.customer-follow-up.is-shared { color:#346d50; }
+.customer-follow-up.is-ordered { color:#a51f25;font-weight:700; }
+
 .customer-account-cell > i,
 .account-summary-card > i,
 .account-confirm-user > i {

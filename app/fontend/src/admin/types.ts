@@ -121,6 +121,16 @@ export interface AdminUser {
   expiresAt?: string;
   createdByUserId?: number | null;
   createdByName?: string;
+  catalogEngagement?: {
+    shareCopies: number;
+    lastShareCopyAt: string;
+    catalogViews: number;
+    lastCatalogViewAt: string;
+    productAdds: number;
+    lastProductAddAt: string;
+    orderCount: number;
+    lastOrderAt: string;
+  };
 }
 
 export interface SalespersonOption {

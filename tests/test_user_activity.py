@@ -97,6 +97,29 @@ class UserActivityTest(unittest.TestCase):
         events = self.conn.execute("SELECT event_type, sku FROM catalog_events ORDER BY id").fetchall()
         self.assertEqual([(row["event_type"], row["sku"]) for row in events], [("catalog_view", ""), ("product_added", "6012001")])
 
+    def test_share_copy_and_customer_interest_are_scoped_to_the_salesperson(self):
+        salesperson_id = db.create_user(self.conn, "sales@example.com", "Sales", "admin", "password123")
+        other_salesperson_id = db.create_user(self.conn, "other@example.com", "Other", "admin", "password123")
+        self.conn.execute("UPDATE users SET created_by_user_id=? WHERE id=?", (salesperson_id, self.user["id"]))
+        self.conn.commit()
+        original_connect = db.connect
+        db.connect = lambda *_args, **_kwargs: self.conn
+        try:
+            with self.assertRaises(HTTPException) as denied:
+                main.api_admin_record_catalog_share_copy(self.user["id"], user={"id": other_salesperson_id, "role": "admin"})
+            self.assertEqual(denied.exception.status_code, 404)
+            main.api_admin_record_catalog_share_copy(self.user["id"], user={"id": salesperson_id, "role": "admin"})
+            main.api_record_catalog_event({"event_type": "catalog_view"}, user=self.user)
+            main.api_record_catalog_event({"event_type": "product_added", "sku": "6012001"}, user=self.user)
+            own = main.api_admin_access_control(user={"id": salesperson_id, "role": "admin"})
+            other = main.api_admin_access_control(user={"id": other_salesperson_id, "role": "admin"})
+        finally:
+            db.connect = original_connect
+        self.assertEqual(len(other["engagement"]), 0)
+        self.assertEqual(len(own["engagement"]), 1)
+        counts = own["engagement"][0]
+        self.assertEqual((counts["share_copies"], counts["catalog_views"], counts["product_adds"], counts["order_count"]), (1, 1, 1, 0))
+
 
 if __name__ == "__main__":
     unittest.main()
