@@ -2514,6 +2514,27 @@ def api_record_original_open(
     return {"recorded": True}
 
 
+@app.post("/api/catalog/events")
+def api_record_catalog_event(payload: dict = Body(...), user=Depends(require_api_user)):
+    if user["role"] not in CUSTOMER_ACCOUNT_ROLES:
+        raise HTTPException(403, detail="Customer account required")
+    event_type = payload.get("event_type")
+    sku = payload.get("sku", "")
+    if not isinstance(event_type, str) or event_type not in db.CATALOG_EVENT_TYPES:
+        raise HTTPException(400, detail="Invalid catalog event")
+    if not isinstance(sku, str) or len(sku) > 100:
+        raise HTTPException(400, detail="Invalid SKU")
+    sku = sku.strip().upper()
+    product_event = event_type in {"product_open", "product_added", "product_removed"}
+    if product_event != bool(sku):
+        raise HTTPException(400, detail="SKU does not match event type")
+    with db.connect() as conn:
+        if sku:
+            ensure_visible_sku(conn, sku, user["role"], int(user["id"]))
+        db.record_catalog_event(conn, int(user["id"]), event_type, sku)
+    return {"recorded": True}
+
+
 @app.get("/api/search")
 def api_search(
     q: str = "",

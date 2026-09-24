@@ -556,6 +556,17 @@ def init_db(conn: sqlite3.Connection) -> None:
           ON user_activity_events(user_id, created_at DESC, id DESC);
         CREATE INDEX IF NOT EXISTS idx_user_activity_type_created
           ON user_activity_events(event_type, created_at DESC, id DESC);
+        CREATE TABLE IF NOT EXISTS catalog_events (
+          id INTEGER PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          event_type TEXT NOT NULL CHECK(event_type IN ('catalog_view','search','product_open','product_added','product_removed','checkout_open')),
+          sku TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_catalog_events_type_created
+          ON catalog_events(event_type, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_catalog_events_user_created
+          ON catalog_events(user_id, created_at DESC);
         """
     )
     edit_logs_table = conn.execute(
@@ -1444,6 +1455,20 @@ def list_salespeople(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         ORDER BY disabled ASC, name COLLATE NOCASE, id
         """
     ).fetchall()
+
+
+CATALOG_EVENT_TYPES = frozenset({"catalog_view", "search", "product_open", "product_added", "product_removed", "checkout_open"})
+
+
+def record_catalog_event(conn: sqlite3.Connection, user_id: int, event_type: str, sku: str = "") -> int:
+    if event_type not in CATALOG_EVENT_TYPES:
+        raise ValueError("Invalid catalog event type")
+    with conn:
+        cursor = conn.execute(
+            "INSERT INTO catalog_events(user_id, event_type, sku) VALUES (?, ?, ?)",
+            (int(user_id), event_type, sku.strip().upper()),
+        )
+    return int(cursor.lastrowid)
 
 
 def record_user_activity(

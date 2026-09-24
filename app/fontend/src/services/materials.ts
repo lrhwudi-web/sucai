@@ -192,6 +192,8 @@ export async function loadProducts(
       products: mockProducts.map((product) => ({
         ...product,
         ...normalizeProductTaxonomy(product.brand, product.category, product.material),
+        availableInventory: product.availableInventory ?? 20,
+        inventoryState: "stale" as const,
         otherCategory: product.otherCategory || "",
         themes: product.themes || [],
         assetTypes: product.assetTypes || [...new Set(product.assets.map((asset) => (

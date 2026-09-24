@@ -140,7 +140,7 @@ export function App() {
   const filterResizeCleanupRef = useRef<(() => void) | null>(null);
   const reportedBatchRef = useRef("");
   const quotation = useQuotation(currentUser ? `${currentUser.id}:${currentUser.email}` : "");
-  const catalogOrder = useCatalogOrder(currentUser?.id ?? null);
+  const catalogOrder = useCatalogOrder(currentUser?.id ?? null, currentUser?.isAdmin ?? false);
   const orderedCatalogProducts = useMemo(() => arrangeProducts(products, catalogOrder.skuOrder), [products, catalogOrder.skuOrder]);
   const catalogTemplateKey = useMemo(() => catalogDraftFingerprint(catalogOrder.draft), [catalogOrder.draft]);
   const quoteSelected = new Set(quotation.draft.order);

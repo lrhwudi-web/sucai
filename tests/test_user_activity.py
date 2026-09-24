@@ -2,6 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from fastapi import HTTPException
+
 from app import db, main
 
 
@@ -77,6 +79,23 @@ class UserActivityTest(unittest.TestCase):
             (self.user["id"],),
         ).fetchone()
         self.assertEqual(event["file_id"], "file-1")
+
+    def test_catalog_funnel_records_visible_products_and_rejects_unknown_skus(self):
+        original_connect = db.connect
+        db.connect = lambda *_args, **_kwargs: self.conn
+        try:
+            self.assertTrue(main.api_record_catalog_event({"event_type": "catalog_view"}, user=self.user)["recorded"])
+            self.assertTrue(main.api_record_catalog_event({"event_type": "product_added", "sku": "6012001"}, user=self.user)["recorded"])
+            with self.assertRaises(HTTPException) as missing:
+                main.api_record_catalog_event({"event_type": "product_added", "sku": "9999999"}, user=self.user)
+            self.assertEqual(missing.exception.status_code, 404)
+            with self.assertRaises(HTTPException) as invalid:
+                main.api_record_catalog_event({"event_type": "product_added"}, user=self.user)
+            self.assertEqual(invalid.exception.status_code, 400)
+        finally:
+            db.connect = original_connect
+        events = self.conn.execute("SELECT event_type, sku FROM catalog_events ORDER BY id").fetchall()
+        self.assertEqual([(row["event_type"], row["sku"]) for row in events], [("catalog_view", ""), ("product_added", "6012001")])
 
 
 if __name__ == "__main__":

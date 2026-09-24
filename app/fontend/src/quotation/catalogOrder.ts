@@ -110,7 +110,7 @@ export function catalogDraftFingerprint(source: QuoteDraft | null | undefined): 
   return JSON.stringify(stableValue({ ...draft, lines }));
 }
 
-export function useCatalogOrder(accountId: number | null) {
+export function useCatalogOrder(accountId: number | null, demoCanManage = false) {
   const [state, setState] = useState<{ accountId: number | null; value: CatalogOrderPayload; loading: boolean; saving: boolean; error: string }>({ accountId: null, value: EMPTY, loading: false, saving: false, error: "" });
   const stateRef = useRef(state);
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
@@ -121,7 +121,7 @@ export function useCatalogOrder(accountId: number | null) {
     if (!apiEnabled()) {
       let skuOrder: string[] = [];
       try { skuOrder = JSON.parse(localStorage.getItem(`kairay.catalogOrder.v1:${accountId}`) || "[]"); } catch { /* use default order */ }
-      setState({ accountId, value: { ...EMPTY, ownerUserId: accountId, ownerName: "Demo salesperson", skuOrder, canManage: true }, loading: false, saving: false, error: "" });
+      setState({ accountId, value: { ...EMPTY, ownerUserId: accountId, ownerName: "Demo salesperson", skuOrder, canManage: demoCanManage }, loading: false, saving: false, error: "" });
       return;
     }
     setState({ accountId, value: EMPTY, loading: true, saving: false, error: "" });
@@ -130,7 +130,7 @@ export function useCatalogOrder(accountId: number | null) {
       .then(payload => { if (!cancelled) setState({ accountId, value: normalize(payload), loading: false, saving: false, error: "" }); })
       .catch(error => { if (!cancelled) setState({ accountId, value: EMPTY, loading: false, saving: false, error: error instanceof Error ? error.message : "Customer catalog order could not be loaded." }); });
     return () => { cancelled = true; };
-  }, [accountId]);
+  }, [accountId, demoCanManage]);
   const enqueueSave = useCallback((skuOrder: string[], draft: QuoteDraft | null) => {
     const clean = [...new Set(skuOrder)].slice(0, 5000);
     const execute = async () => {

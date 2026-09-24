@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowCounterClockwise, CheckCircle, FileXls, SpinnerGap, X } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, CheckCircle, FileXls, ShoppingCartSimple, SpinnerGap, X } from "@phosphor-icons/react";
 import type { MaterialProduct } from "../types";
 import { AssetImage } from "../components/AssetImage";
 import { submitCustomerOrder, type CustomerOrder } from "../orders/orderService";
+import { recordCatalogEvent } from "./catalogEvents";
 import { columnLabel, columnsForCatalog, createCalculator, inventoryLimit, layoutOf, rawValue, sheetTotals } from "./workbookData";
 import { formatMoney, isQuotable, moveQuoteLine, priceCents, priceRangesOf, quantityValue, quoteProducts, type QuoteDraft } from "./quotation";
 
@@ -141,8 +142,8 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
 
   return <>
     <button className="quote-button is-primary" disabled={canManageCatalogOrder ? !selected.length && !eligible.length : !selected.length}
-      onClick={() => { setError(""); setScope(selected.length ? "selected" : "sheet"); setOpen(true); }}>
-      <FileXls size={18} />{canManageCatalogOrder ? "Export Excel" : "Place order"}{selected.length > 0 && <span>{selected.length}</span>}
+      onClick={() => { setError(""); setScope(selected.length ? "selected" : "sheet"); setOpen(true); if (!canManageCatalogOrder) recordCatalogEvent("checkout_open"); }}>
+      {canManageCatalogOrder ? <FileXls size={18} /> : <ShoppingCartSimple size={18} />}{canManageCatalogOrder ? "Export Excel" : "Place order"}{selected.length > 0 && <span>{selected.length}</span>}
     </button>
     <dialog ref={dialog} className="quote-dialog" aria-labelledby="quote-dialog-title"
       onCancel={e => { if (exporting) e.preventDefault(); else setOpen(false); }} onClose={() => setOpen(false)}>
@@ -150,14 +151,14 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
         <header className="quote-dialog-header">
           <div><span className="quote-eyebrow">{canManageCatalogOrder ? "YOUR CUSTOMER CATALOG" : "CONFIRM CUSTOMER ORDER"}</span><h2 id="quote-dialog-title">{canManageCatalogOrder ? "Export Excel catalog" : "Place order"}</h2>
             <p>{canManageCatalogOrder?"Review the administrator catalog columns before exporting.":"Review the products and quantities below. After confirmation, the order is saved and your salesperson receives the Excel download link."}</p></div>
-          <button className="quote-icon-button" aria-label="Close Excel export" disabled={exporting} onClick={() => setOpen(false)}><X size={22} /></button>
+          <button className="quote-icon-button" aria-label={canManageCatalogOrder ? "Close Excel export" : "Close order review"} disabled={exporting} onClick={() => setOpen(false)}><X size={22} /></button>
         </header>
         {readyOrder && <div ref={successNotice} className="quote-order-success" role="status" aria-live="polite" tabIndex={-1}>
           <CheckCircle size={28} weight="fill" aria-hidden="true" />
           <div><strong>Order submitted successfully</strong><span>Order {readyOrder.orderNumber} · {readyOrder.fileName}</span></div>
           <a href={readyOrder.downloadUrl}><FileXls size={18} aria-hidden="true" />Download order Excel</a>
         </div>}
-        <fieldset disabled={exporting} className="quote-details-grid"><legend className="quote-sr-only">Excel export details</legend>
+        <fieldset disabled={exporting} className="quote-details-grid"><legend className="quote-sr-only">{canManageCatalogOrder ? "Excel export details" : "Order details"}</legend>
           <label className="quote-title-field">{canManageCatalogOrder ? "Catalog title" : "Order title"}<input value={draft.title} maxLength={120} onChange={e => set({ title: e.target.value })} /></label>
           {canManageCatalogOrder ? <label>Products to export<select value={scope} onChange={e => setScope(e.target.value as "selected" | "sheet")}>
             <option value="selected" disabled={!selected.length}>Selected products ({selected.length})</option>
@@ -166,16 +167,26 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
           <label>Your company<input value={draft.company} placeholder="Company name" maxLength={120} onChange={e => set({ company: e.target.value })} /></label>
           <label>Reply-to contact<input value={draft.contact} placeholder="Email or phone" maxLength={120} onChange={e => set({ contact: e.target.value })} /></label>
           <label>Quote reference<input value={draft.reference} placeholder="Optional" maxLength={120} onChange={e => set({ reference: e.target.value })} /></label>
-          <label>Currency<select value={draft.currency} onChange={e => set({ currency: e.target.value })}>{["USD", "EUR", "GBP", "CAD", "AUD", "CNY", "JPY"].map(currency => <option key={currency}>{currency}</option>)}</select></label>
+          <label>Currency<select value={draft.currency} disabled={!canManageCatalogOrder} onChange={e => set({ currency: e.target.value })}>{["USD", "EUR", "GBP", "CAD", "AUD", "CNY", "JPY"].map(currency => <option key={currency}>{currency}</option>)}</select></label>
         </fieldset>
-        <div className="quote-column-options"><strong>Visible columns</strong>{sheetColumns.map(c => <label key={c.key}>
+        {canManageCatalogOrder && <div className="quote-column-options"><strong>Visible columns</strong>{sheetColumns.map(c => <label key={c.key}>
           <input type="checkbox" checked={!layout.hidden.includes(c.key)} disabled={exporting}
             onChange={e => {
               if (!e.target.checked && columns.length === 1) { onNotify("Keep at least one column visible."); return; }
               set({ layout: { ...layout, hidden: e.target.checked ? layout.hidden.filter(k => k !== c.key) : [...layout.hidden, c.key] } });
-            }} />{columnLabel(c, salesWarehouseName, layout.labels, layout.priceRanges).replace("\n", " ")}</label>)}<span>Hidden columns can be shown again in Excel.</span></div>
+            }} />{columnLabel(c, salesWarehouseName, layout.labels, layout.priceRanges).replace("\n", " ")}</label>)}<span>Hidden columns can be shown again in Excel.</span></div>}
         {scope === "selected" && missing > 0 && <p className="quote-warning" role="status">{missing} previously selected products are no longer available to this account and will be excluded.</p>}
-        <div className="quote-editor-area wb-export-preview" inert={exporting || undefined}>
+        {!canManageCatalogOrder ? <div className="quote-customer-review" aria-label="Products in this order">
+          {exportProducts.map((product, row) => {
+            const quantity = quantityValue(draft.lines[product.sku]?.quantity || "") || 0;
+            const amount = calc.cell(row, "amount");
+            return <div className="quote-review-item" key={product.sku}>
+              <AssetImage src={rawValue(draft, product, "photo", row + 3)} alt={product.name} loading="lazy" />
+              <div><strong>{String(rawValue(draft, product, "name", row + 3))}</strong><span>SKU {product.sku} · {quantity.toLocaleString()} pcs</span></div>
+              <b>{typeof amount === "number" ? formatMoney(Math.round(amount * 100), draft.currency) : "Price pending"}</b>
+            </div>;
+          })}
+        </div> : <div className="quote-editor-area wb-export-preview" inert={exporting || undefined}>
           {exportProducts.length ? <table><thead><tr>{scope === "selected" && <th>ORDER</th>}{columns.map(c => <th key={c.key}>{columnLabel(c, salesWarehouseName, layout.labels, layout.priceRanges)}</th>)}</tr></thead>
             <tbody>{exportProducts.map((p, row) => <tr key={p.sku}>
               {scope === "selected" && <td><button aria-label={`Move ${p.sku} up`} disabled={!row} onClick={() => onUpdate(d => moveQuoteLine(d, p.sku, -1))}>↑</button>
@@ -184,13 +195,13 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
                 ? <AssetImage src={rawValue(draft, p, "photo", row + 3)} alt={p.name} loading="lazy" />
                 : typeof value === "number" && ["price", "priceBulk", "msrp", "amount"].includes(c.key) ? formatMoney(Math.round(value * 100), draft.currency) : String(value)}</td>; })}
             </tr>)}</tbody></table> : <div className="quote-empty">No products to export. Choose the current worksheet or select products in the catalog.</div>}
-        </div>
+        </div>}
         <footer className="quote-dialog-footer">
           <div className="quote-totals"><strong>{exportProducts.length} products{!canManageCatalogOrder&&<> <span>·</span> {totals.quantity.toLocaleString()} pcs</>}</strong>
             {!canManageCatalogOrder&&<span>{totals.unpriced ? "Priced subtotal" : "Subtotal"}: <b>{formatMoney(totals.amountCents, draft.currency)}</b>{totals.unpriced > 0 && ` · ${totals.unpriced} awaiting price`}</span>}</div>
           {selected.length > 0 && <button className="quote-button" disabled={exporting} onClick={() => { onUpdate(d => ({ ...d, order: [] })); setScope("sheet"); }}><ArrowCounterClockwise size={16} />Clear selection</button>}
           <button className="quote-button is-primary" disabled={!exportProducts.length || exporting} onClick={canManageCatalogOrder ? exportExcel : placeOrder}>
-            {exporting ? <SpinnerGap className="is-spinning" size={18} /> : <FileXls size={18} />}{exporting ? progress : canManageCatalogOrder ? "Download Excel" : "Confirm order"}
+            {exporting ? <SpinnerGap className="is-spinning" size={18} /> : canManageCatalogOrder ? <FileXls size={18} /> : <ShoppingCartSimple size={18} />}{exporting ? progress : canManageCatalogOrder ? "Download Excel" : "Confirm order"}
           </button>
         </footer>
         {readyExcel && <div className="wb-download"><span>Excel ready · {Math.ceil(readyExcel.size / 1024)} KB</span><a href={readyExcel.url} download={readyExcel.name}>Save Excel file</a></div>}
