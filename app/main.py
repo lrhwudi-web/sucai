@@ -3026,6 +3026,40 @@ def api_admin_record_catalog_share_copy(user_id: int, user=Depends(require_api_a
     return {"recorded": True}
 
 
+@app.post("/api/admin/users/{user_id}/catalog-invite")
+def api_admin_create_catalog_invite(user_id: int, token: str = Form(...), user=Depends(require_api_admin)):
+    if not re.fullmatch(r"[a-f0-9]{32}", token):
+        raise HTTPException(400, "邀请链接无效")
+    with closing(db.connect()) as conn:
+        db.init_db(conn)
+        owner_id = None if user["role"] == "super_admin" else int(user["id"])
+        customer = next((row for row in db.list_customer_users(conn, owner_id) if row["id"] == user_id), None)
+        if customer is None:
+            raise HTTPException(404, "客户账号不存在或无权访问")
+        if customer["disabled"] or customer["expired"]:
+            raise HTTPException(409, "客户账号已停用或过期，请先续期或启用")
+        db.create_customer_catalog_invite(
+            conn, user_id, int(user["id"]), hashlib.sha256(token.encode("utf-8")).hexdigest()
+        )
+    return {"created": True}
+
+
+@app.post("/api/catalog-invites/open")
+def api_open_catalog_invite(payload: dict = Body(...)):
+    token = payload.get("token")
+    if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", token):
+        raise HTTPException(404, "Catalog invitation unavailable")
+    with closing(db.connect()) as conn:
+        db.init_db(conn)
+        customer = db.open_customer_catalog_invite(conn, hashlib.sha256(token.encode("utf-8")).hexdigest())
+    if customer is None:
+        raise HTTPException(404, "Catalog invitation unavailable")
+    return JSONResponse(
+        {"email": customer["email"], "name": customer["name"]},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.post("/api/admin/users")
 def api_admin_create_customer_user(
     email: str = Form(...),

@@ -20,6 +20,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { normalizeBrandLabel } from "../utils/category";
+import { apiEnabled } from "../services/auth";
 import { postAdminAction } from "./adminService";
 import type { AdminUser, PermissionRule, SalespersonOption, UserPermissionGrant } from "./types";
 
@@ -86,6 +87,7 @@ function catalogFollowUp(user: AdminUser) {
   if (activity.orderCount) return { label: `已下单 ${activity.orderCount} 次${activity.lastOrderAt ? ` · ${activity.lastOrderAt}` : ""}`, kind: "ordered" };
   if (activity.productAdds) return { label: `曾选品，尚未下单${activity.lastProductAddAt ? ` · ${activity.lastProductAddAt}` : ""}`, kind: "interest" };
   if (activity.catalogViews) return { label: `已查看目录 ${activity.catalogViews} 次${activity.lastCatalogViewAt ? ` · ${activity.lastCatalogViewAt}` : ""}`, kind: "viewed" };
+  if (activity.inviteOpens) return { label: `已打开邀请，尚未看目录${activity.lastInviteOpenAt ? ` · ${activity.lastInviteOpenAt}` : ""}`, kind: "viewed" };
   if (activity.shareCopies) return { label: `已复制邀请，未见查看${activity.lastShareCopyAt ? ` · ${activity.lastShareCopyAt}` : ""}`, kind: "shared" };
   return { label: "新目录：暂无记录", kind: "none" };
 }
@@ -469,35 +471,47 @@ export function PermissionsPanel({
   };
 
   const copyCustomerCatalogInvite = async (user: AdminUser) => {
-    if (user.disabled) return;
-    const catalogUrl = `${window.location.origin}${window.location.pathname}#quotation`;
+    if (user.disabled || user.expired) return;
+    const token = apiEnabled() ? crypto.randomUUID().replaceAll("-", "") : "";
+    const catalogUrl = new URL(window.location.pathname, window.location.origin);
+    if (token) catalogUrl.searchParams.set("invite", token);
+    catalogUrl.hash = "quotation";
     const message = user.role === "海外客户" || user.role === "overseas_customer"
-      ? `Hi ${user.name}, here is your Kairay Golf product catalog: ${catalogUrl}\nSign in with your business account to view products, enter quantities, and send your order. Reply here if you need a quote or help.`
-      : `${user.name}，这是您的凯瑞高尔夫产品目录：${catalogUrl}\n使用客户账号登录后可查看产品、填写数量并提交订单。如需报价或协助，直接在微信回复我。`;
+      ? `Hi ${user.name}, here is your Kairay Golf product catalog: ${catalogUrl}\nSign in to view products, enter quantities, and send your order. Reply here if you need a quote or help.`
+      : `${user.name}，这是您的凯瑞高尔夫产品目录：${catalogUrl}\n登录后可查看产品、填写数量并提交订单。如需报价或协助，直接在微信回复我。`;
     try {
       await navigator.clipboard.writeText(message);
-      try {
-        const result = await postAdminAction(`/api/admin/users/${user.id}/catalog-share-copy`);
-        if (result.mode === "api") await onRefresh();
-        else setUsers(current => current.map(item => item.id === user.id ? {
-          ...item,
-          catalogEngagement: {
-            shareCopies: (item.catalogEngagement?.shareCopies || 0) + 1,
-            lastShareCopyAt: "刚刚",
-            catalogViews: item.catalogEngagement?.catalogViews || 0,
-            lastCatalogViewAt: item.catalogEngagement?.lastCatalogViewAt || "",
-            productAdds: item.catalogEngagement?.productAdds || 0,
-            lastProductAddAt: item.catalogEngagement?.lastProductAddAt || "",
-            orderCount: item.catalogEngagement?.orderCount || 0,
-            lastOrderAt: item.catalogEngagement?.lastOrderAt || "",
-          },
-        } : item));
-        onNotify(`已复制 ${user.name} 的目录邀请，可粘贴到微信`);
-      } catch {
-        onNotify("邀请已复制，可粘贴到微信；跟进记录暂未保存");
-      }
     } catch {
       onNotify("复制失败，请检查浏览器剪贴板权限后重试");
+      return;
+    }
+    try {
+      if (token) await postAdminAction(`/api/admin/users/${user.id}/catalog-invite`, { token });
+    } catch {
+      onNotify("链接未启用，请勿发送刚复制的邀请；请重试");
+      return;
+    }
+    try {
+      const result = await postAdminAction(`/api/admin/users/${user.id}/catalog-share-copy`);
+      if (result.mode === "api") await onRefresh();
+      else setUsers(current => current.map(item => item.id === user.id ? {
+        ...item,
+        catalogEngagement: {
+          shareCopies: (item.catalogEngagement?.shareCopies || 0) + 1,
+          lastShareCopyAt: "刚刚",
+          inviteOpens: item.catalogEngagement?.inviteOpens || 0,
+          lastInviteOpenAt: item.catalogEngagement?.lastInviteOpenAt || "",
+          catalogViews: item.catalogEngagement?.catalogViews || 0,
+          lastCatalogViewAt: item.catalogEngagement?.lastCatalogViewAt || "",
+          productAdds: item.catalogEngagement?.productAdds || 0,
+          lastProductAddAt: item.catalogEngagement?.lastProductAddAt || "",
+          orderCount: item.catalogEngagement?.orderCount || 0,
+          lastOrderAt: item.catalogEngagement?.lastOrderAt || "",
+        },
+      } : item));
+      onNotify(`已复制 ${user.name} 的目录邀请，可粘贴到微信`);
+    } catch {
+      onNotify("邀请链接已启用，可粘贴到微信；复制记录暂未保存");
     }
   };
 
@@ -537,13 +551,13 @@ export function PermissionsPanel({
                 const allBrands = visibleBrands.length === brandOptions.length && brandOptions.length > 0;
                 return (
                   <div className="customer-access-row" role="row" key={user.id}>
-                    <span className="customer-account-cell"><i>{initials(user.name)}</i><span><strong>{user.name}</strong><small>{user.email}</small><em className={`customer-follow-up is-${catalogFollowUp(user).kind}`} title={`复制邀请 ${user.catalogEngagement?.shareCopies || 0} 次；目录查看 ${user.catalogEngagement?.catalogViews || 0} 次；加单 ${user.catalogEngagement?.productAdds || 0} 次；正式订单 ${user.catalogEngagement?.orderCount || 0} 次`}>{catalogFollowUp(user).label}</em></span></span>
+                    <span className="customer-account-cell"><i>{initials(user.name)}</i><span><strong>{user.name}</strong><small>{user.email}</small><em className={`customer-follow-up is-${catalogFollowUp(user).kind}`} title={`复制邀请 ${user.catalogEngagement?.shareCopies || 0} 次；邀请打开 ${user.catalogEngagement?.inviteOpens || 0} 次；目录查看 ${user.catalogEngagement?.catalogViews || 0} 次；加单 ${user.catalogEngagement?.productAdds || 0} 次；正式订单 ${user.catalogEngagement?.orderCount || 0} 次`}>{catalogFollowUp(user).label}</em></span></span>
                     <span><mark className="customer-role-badge">{user.role}</mark></span>
                     <span className="permission-chip-list">{allBrands ? <em className="permission-chip is-all">全部品牌</em> : visibleBrands.slice(0, 2).map((brand) => <em className="permission-chip" key={brand}>{normalizeBrandLabel(brand)}</em>)}{!allBrands && <PermissionOverflow label="品牌" values={visibleBrands.slice(2).map(normalizeBrandLabel)} onShow={showPermissionTooltip} onHide={() => setPermissionTooltip(null)} />}{!visibleBrands.length && <small className="permission-empty">未开放品牌</small>}</span>
                     <span className="permission-chip-list">{extras.slice(0, 1).map((value) => <em className="permission-chip is-muted" key={value}>{value}</em>)}<PermissionOverflow label="扩展素材" values={extras.slice(1)} onShow={showPermissionTooltip} onHide={() => setPermissionTooltip(null)} />{!extras.length && <small className="permission-empty">—</small>}</span>
                     <span className="customer-access-date">{user.expiresAt || "创建后 15 天"}</span>
                     <span><em className={`customer-status ${user.disabled ? "is-disabled" : ""}`}><i /> {user.expired ? "已过期" : user.disabled ? "已停用" : "正常"}</em></span>
-                    <span className="customer-access-actions">{user.expired && <button className="table-icon renew-catalog-action" type="button" disabled={renewingId !== null} onClick={() => void renewCustomerAccount(user)} aria-label={`为 ${user.name} 续期 15 天`} title="保留现有权限，为过期账号续期 15 天">{renewingId === user.id ? "续期中" : "续期"}</button>}<button className="table-icon share-catalog-action" type="button" disabled={user.disabled} onClick={() => void copyCustomerCatalogInvite(user)} aria-label={`复制发给 ${user.name} 的目录消息`} title={user.disabled ? "账号已停用，启用后才能邀请" : "复制目录链接和说明，粘贴到微信"}>发目录</button><button className="table-icon" type="button" onClick={() => openAccountEditor(user)} aria-label={`修改 ${user.name} 的账号`} title="修改账号、权限和密码"><PencilSimple size={17} weight="bold" /></button></span>
+                    <span className="customer-access-actions">{user.expired && <button className="table-icon renew-catalog-action" type="button" disabled={renewingId !== null} onClick={() => void renewCustomerAccount(user)} aria-label={`为 ${user.name} 续期 15 天`} title="保留现有权限，为过期账号续期 15 天">{renewingId === user.id ? "续期中" : "续期"}</button>}<button className="table-icon share-catalog-action" type="button" disabled={user.disabled || user.expired} onClick={() => void copyCustomerCatalogInvite(user)} aria-label={`复制发给 ${user.name} 的目录消息`} title={user.disabled || user.expired ? "账号不可用，启用或续期后才能邀请" : "复制目录链接和说明，粘贴到微信"}>发目录</button><button className="table-icon" type="button" onClick={() => openAccountEditor(user)} aria-label={`修改 ${user.name} 的账号`} title="修改账号、权限和密码"><PencilSimple size={17} weight="bold" /></button></span>
                   </div>
                 );
               })}

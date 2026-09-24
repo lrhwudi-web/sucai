@@ -24,14 +24,21 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [inviteName, setInviteName] = useState("");
   const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const inviteHandled = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const dingtalkError = params.get("dingtalk_error");
+    const invite = params.get("invite");
+    if (invite) params.delete("invite");
     if (dingtalkError) {
       setError(dingtalkError);
       params.delete("dingtalk_error");
+    }
+    if (invite || dingtalkError) {
       const query = params.toString();
       window.history.replaceState(
         null,
@@ -39,7 +46,27 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
         `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
       );
     }
-    emailRef.current?.focus();
+    if (invite && !inviteHandled.current) {
+      inviteHandled.current = true;
+      void fetch("/api/catalog-invites/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: invite }),
+        credentials: "include",
+      }).then(async response => {
+        if (!response.ok) throw new Error("This invitation has expired. Ask your salesperson for a new link.");
+        return response.json() as Promise<{ email: string; name: string }>;
+      }).then(customer => {
+        setEmail(customer.email);
+        setInviteName(customer.name);
+        passwordRef.current?.focus();
+      }).catch(caught => {
+        setNotice(caught instanceof Error ? caught.message : "Please sign in with your account.");
+        emailRef.current?.focus();
+      });
+    } else {
+      emailRef.current?.focus();
+    }
   }, []);
 
   const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
@@ -88,8 +115,8 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
           </div>
 
           <header className="login-command-heading">
-            <h1 id="login-title">See products. Build your order.</h1>
-            <p>Sign in with your business email to check your catalog and order online.</p>
+            <h1 id="login-title">{inviteName ? `Welcome, ${inviteName}` : "See products. Build your order."}</h1>
+            <p>{inviteName ? "Your catalog is ready. Enter your password to view products and build an order." : "Sign in with your business email to check your catalog and order online."}</p>
           </header>
 
           <form className="login-command-form" onSubmit={submitLogin}>
@@ -112,6 +139,7 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
               <span>Password</span>
               <span className="login-command-input has-action">
                 <input
+                  ref={passwordRef}
                   type={passwordVisible ? "text" : "password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}

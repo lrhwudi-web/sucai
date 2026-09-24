@@ -575,6 +575,17 @@ def init_db(conn: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_customer_catalog_share_customer
           ON customer_catalog_share_copies(customer_user_id, created_at DESC);
+        CREATE TABLE IF NOT EXISTS customer_catalog_invites (
+          token_hash TEXT PRIMARY KEY,
+          customer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          created_by_user_id INTEGER NOT NULL REFERENCES users(id),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          expires_at TEXT NOT NULL,
+          open_count INTEGER NOT NULL DEFAULT 0,
+          last_opened_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_customer_catalog_invites_customer
+          ON customer_catalog_invites(customer_user_id, created_at DESC);
         CREATE TABLE IF NOT EXISTS customer_account_renewals (
           id INTEGER PRIMARY KEY,
           customer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1471,6 +1482,34 @@ def record_customer_catalog_share_copy(conn: sqlite3.Connection, customer_user_i
         )
 
 
+def create_customer_catalog_invite(conn: sqlite3.Connection, customer_user_id: int, created_by_user_id: int, token_hash: str) -> None:
+    with conn:
+        conn.execute(
+            """INSERT INTO customer_catalog_invites(token_hash, customer_user_id, created_by_user_id, expires_at)
+               VALUES (?, ?, ?, datetime('now', '+30 days'))""",
+            (token_hash, int(customer_user_id), int(created_by_user_id)),
+        )
+
+
+def open_customer_catalog_invite(conn: sqlite3.Connection, token_hash: str) -> sqlite3.Row | None:
+    with conn:
+        invite = conn.execute(
+            """SELECT invites.customer_user_id, users.email, users.name
+               FROM customer_catalog_invites invites JOIN users ON users.id=invites.customer_user_id
+               WHERE invites.token_hash=? AND invites.expires_at>CURRENT_TIMESTAMP
+                 AND users.disabled=0 AND (users.expires_at IS NULL OR datetime(users.expires_at)>CURRENT_TIMESTAMP)""",
+            (token_hash,),
+        ).fetchone()
+        if invite:
+            conn.execute(
+                """UPDATE customer_catalog_invites
+                   SET open_count=open_count+1, last_opened_at=CURRENT_TIMESTAMP
+                   WHERE token_hash=?""",
+                (token_hash,),
+            )
+    return invite
+
+
 def customer_catalog_engagement(conn: sqlite3.Connection, created_by_user_id: int | None = None) -> list[sqlite3.Row]:
     placeholders = ",".join("?" for _ in CUSTOMER_ACCOUNT_ROLES)
     return conn.execute(
@@ -1478,6 +1517,8 @@ def customer_catalog_engagement(conn: sqlite3.Connection, created_by_user_id: in
         SELECT users.id AS user_id,
                COALESCE(shares.share_copies, 0) AS share_copies,
                shares.last_share_copy_at,
+               COALESCE(invites.invite_opens, 0) AS invite_opens,
+               invites.last_invite_open_at,
                COALESCE(events.catalog_views, 0) AS catalog_views,
                events.last_catalog_view_at,
                COALESCE(events.product_adds, 0) AS product_adds,
@@ -1489,6 +1530,10 @@ def customer_catalog_engagement(conn: sqlite3.Connection, created_by_user_id: in
           SELECT customer_user_id, COUNT(*) AS share_copies, MAX(created_at) AS last_share_copy_at
           FROM customer_catalog_share_copies GROUP BY customer_user_id
         ) shares ON shares.customer_user_id=users.id
+        LEFT JOIN (
+          SELECT customer_user_id, SUM(open_count) AS invite_opens, MAX(last_opened_at) AS last_invite_open_at
+          FROM customer_catalog_invites GROUP BY customer_user_id
+        ) invites ON invites.customer_user_id=users.id
         LEFT JOIN (
           SELECT user_id,
                  SUM(CASE WHEN event_type='catalog_view' THEN 1 ELSE 0 END) AS catalog_views,

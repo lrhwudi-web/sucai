@@ -124,6 +124,8 @@ export interface AdminUser {
   catalogEngagement?: {
     shareCopies: number;
     lastShareCopyAt: string;
+    inviteOpens: number;
+    lastInviteOpenAt: string;
     catalogViews: number;
     lastCatalogViewAt: string;
     productAdds: number;

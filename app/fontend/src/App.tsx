@@ -139,6 +139,7 @@ export function App() {
   const filterResizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
   const filterResizeCleanupRef = useRef<(() => void) | null>(null);
   const reportedBatchRef = useRef("");
+  const trackedSignedInInvite = useRef("");
   const quotation = useQuotation(currentUser ? `${currentUser.id}:${currentUser.email}` : "");
   const catalogOrder = useCatalogOrder(currentUser?.id ?? null, currentUser?.isAdmin ?? false);
   const orderedCatalogProducts = useMemo(() => arrangeProducts(products, catalogOrder.skuOrder), [products, catalogOrder.skuOrder]);
@@ -209,6 +210,23 @@ export function App() {
       });
     return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    if (sessionLoading || !currentUser) return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("invite");
+    if (!token || trackedSignedInInvite.current === token) return;
+    trackedSignedInInvite.current = token;
+    params.delete("invite");
+    const query = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+    void fetch("/api/catalog-invites/open", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    }).catch(() => { /* Invitation tracking must not block the catalog. */ });
+  }, [sessionLoading, currentUser]);
 
   useEffect(() => {
     if (!currentUser?.isAdmin) {

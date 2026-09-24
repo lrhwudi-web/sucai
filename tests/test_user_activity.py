@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -119,6 +120,41 @@ class UserActivityTest(unittest.TestCase):
         self.assertEqual(len(own["engagement"]), 1)
         counts = own["engagement"][0]
         self.assertEqual((counts["share_copies"], counts["catalog_views"], counts["product_adds"], counts["order_count"]), (1, 1, 1, 0))
+
+    def test_invite_open_prefills_only_its_customer_and_records_real_open(self):
+        salesperson_id = db.create_user(self.conn, "sales@example.com", "Sales", "admin", "password123")
+        other_salesperson_id = db.create_user(self.conn, "other@example.com", "Other", "admin", "password123")
+        self.conn.execute("UPDATE users SET created_by_user_id=? WHERE id=?", (salesperson_id, self.user["id"]))
+        self.conn.commit()
+        original_connect = db.connect
+        opened_connections = []
+        def tracked_connect(*_args, **_kwargs):
+            connection = original_connect(Path(self.tmp.name) / "activity.db")
+            opened_connections.append(connection)
+            return connection
+        db.connect = tracked_connect
+        try:
+            token = "0123456789abcdef0123456789abcdef"
+            with self.assertRaises(HTTPException) as denied:
+                main.api_admin_create_catalog_invite(self.user["id"], token=token, user={"id": other_salesperson_id, "role": "admin"})
+            self.assertEqual(denied.exception.status_code, 404)
+            main.api_admin_create_catalog_invite(self.user["id"], token=token, user={"id": salesperson_id, "role": "admin"})
+            self.assertNotIn(token, str(self.conn.execute("SELECT token_hash FROM customer_catalog_invites").fetchone()[0]))
+            opened = main.api_open_catalog_invite({"token": token})
+            self.assertEqual(json.loads(opened.body)["email"], self.user["email"])
+            own = main.api_admin_access_control(user={"id": salesperson_id, "role": "admin"})
+            other = main.api_admin_access_control(user={"id": other_salesperson_id, "role": "admin"})
+            self.assertEqual(own["engagement"][0]["invite_opens"], 1)
+            self.assertEqual(other["engagement"], [])
+            self.conn.execute("UPDATE customer_catalog_invites SET expires_at=datetime('now', '-1 day')")
+            self.conn.commit()
+            with self.assertRaises(HTTPException) as expired:
+                main.api_open_catalog_invite({"token": token})
+            self.assertEqual(expired.exception.status_code, 404)
+        finally:
+            db.connect = original_connect
+            for connection in opened_connections:
+                connection.close()
 
 
 if __name__ == "__main__":
