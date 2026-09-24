@@ -291,15 +291,18 @@ class CustomerAccessTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             conn = db.connect(Path(tmp) / "test.db")
             db.init_db(conn)
+            admin_id = db.create_user(conn, "sales@example.com", "Sales", "admin", "password123")
             db.create_user(conn, "buyer@example.com", "Buyer", "overseas_customer", "password123")
             buyer = conn.execute("SELECT id FROM users WHERE email='buyer@example.com'").fetchone()
+            conn.execute("UPDATE users SET created_by_user_id=? WHERE id=?", (admin_id, int(buyer["id"])))
+            conn.commit()
             db.create_role_rule(conn, "overseas_customer", "other", "No Brand")
             db.create_user_grant(conn, int(buyer["id"]), "brand", "01 Craftsman Golf")
 
             original_connect = db.connect
             db.connect = lambda *_args, **_kwargs: conn
             try:
-                payload = main.api_admin_access_control(user={"id": 2, "role": "admin"})
+                payload = main.api_admin_access_control(user={"id": admin_id, "role": "admin"})
             finally:
                 db.connect = original_connect
                 conn.close()
