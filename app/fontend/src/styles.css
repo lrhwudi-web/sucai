@@ -13657,7 +13657,7 @@ body {
 .customer-access-row {
   min-height: 82px;
   display: grid;
-  grid-template-columns: minmax(210px, 1.55fr) minmax(90px, .65fr) minmax(180px, 1.3fr) minmax(130px, 1fr) minmax(100px, .7fr) 75px 100px;
+  grid-template-columns: minmax(210px, 1.55fr) minmax(90px, .65fr) minmax(180px, 1.3fr) minmax(130px, 1fr) minmax(100px, .7fr) 75px 165px;
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
@@ -13874,6 +13874,15 @@ button.permission-chip.is-more:focus-visible {
 .customer-access-actions .share-catalog-action:disabled {
   color: #aa9e99;
   cursor: not-allowed;
+}
+
+.customer-access-actions .renew-catalog-action {
+  width: auto;
+  min-width: 48px;
+  padding: 0 5px;
+  color: #246846;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .customer-access-actions .table-icon {

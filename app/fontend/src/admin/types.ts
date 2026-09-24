@@ -116,6 +116,7 @@ export interface AdminUser {
   role: string;
   permissionMode: "role_default" | "allowlist";
   disabled: boolean;
+  expired?: boolean;
   createdAt: string;
   expiresAt?: string;
   createdByUserId?: number | null;

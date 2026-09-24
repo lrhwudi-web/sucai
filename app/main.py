@@ -3092,6 +3092,19 @@ def api_admin_update_customer_user(
     return {"user": dict(updated), "grants": grants}
 
 
+@app.post("/api/admin/users/{user_id}/renew")
+def api_admin_renew_customer_user(user_id: int, user=Depends(require_api_admin)):
+    with db.connect() as conn:
+        db.init_db(conn)
+        if user["role"] != "super_admin" and not db.customer_owned_by(conn, user_id, int(user["id"])):
+            raise HTTPException(403, "只能续期自己创建的客户账号")
+        try:
+            renewed = db.renew_expired_customer_user(conn, user_id, int(user["id"]))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return {"user": dict(renewed)}
+
+
 @app.post("/api/admin/users/{user_id}/reset-password")
 def api_admin_reset_customer_password(user_id: int, user=Depends(require_api_admin)):
     groups = ("ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnopqrstuvwxyz", "23456789", "!@#$%")

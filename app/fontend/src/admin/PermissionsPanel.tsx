@@ -175,6 +175,7 @@ export function PermissionsPanel({
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [showTemporaryPassword, setShowTemporaryPassword] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
+  const [renewingId, setRenewingId] = useState<number | null>(null);
   const [permissionTooltip, setPermissionTooltip] = useState<null | { label: string; values: string[]; left: number; top: number }>(null);
 
   useEffect(() => setUsers(providedUsers), [providedUsers]);
@@ -471,6 +472,21 @@ export function PermissionsPanel({
     }
   };
 
+  const renewCustomerAccount = async (user: AdminUser) => {
+    if (!user.expired || renewingId !== null) return;
+    setRenewingId(user.id);
+    try {
+      const result = await postAdminAction(`/api/admin/users/${user.id}/renew`);
+      if (result.mode === "api") await onRefresh();
+      else setUsers(current => current.map(item => item.id === user.id ? { ...item, disabled: false, expired: false, expiresAt: "15 天后" } : item));
+      onNotify(`${user.name} 的账号已续期 15 天，原有权限保持不变`);
+    } catch (error) {
+      onNotify(error instanceof Error ? error.message : "续期失败，请稍后重试");
+    } finally {
+      setRenewingId(null);
+    }
+  };
+
   return (
     <section className="admin-section customer-access-page">
       <header className="customer-access-heading">
@@ -497,8 +513,8 @@ export function PermissionsPanel({
                     <span className="permission-chip-list">{allBrands ? <em className="permission-chip is-all">全部品牌</em> : visibleBrands.slice(0, 2).map((brand) => <em className="permission-chip" key={brand}>{normalizeBrandLabel(brand)}</em>)}{!allBrands && <PermissionOverflow label="品牌" values={visibleBrands.slice(2).map(normalizeBrandLabel)} onShow={showPermissionTooltip} onHide={() => setPermissionTooltip(null)} />}{!visibleBrands.length && <small className="permission-empty">未开放品牌</small>}</span>
                     <span className="permission-chip-list">{extras.slice(0, 1).map((value) => <em className="permission-chip is-muted" key={value}>{value}</em>)}<PermissionOverflow label="扩展素材" values={extras.slice(1)} onShow={showPermissionTooltip} onHide={() => setPermissionTooltip(null)} />{!extras.length && <small className="permission-empty">—</small>}</span>
                     <span className="customer-access-date">{user.expiresAt || "创建后 15 天"}</span>
-                    <span><em className={`customer-status ${user.disabled ? "is-disabled" : ""}`}><i /> {user.disabled ? "已停用" : "正常"}</em></span>
-                    <span className="customer-access-actions"><button className="table-icon share-catalog-action" type="button" disabled={user.disabled} onClick={() => void copyCustomerCatalogInvite(user)} aria-label={`复制发给 ${user.name} 的目录消息`} title={user.disabled ? "账号已停用，启用后才能邀请" : "复制目录链接和说明，粘贴到微信"}>发目录</button><button className="table-icon" type="button" onClick={() => openAccountEditor(user)} aria-label={`修改 ${user.name} 的账号`} title="修改账号、权限和密码"><PencilSimple size={17} weight="bold" /></button></span>
+                    <span><em className={`customer-status ${user.disabled ? "is-disabled" : ""}`}><i /> {user.expired ? "已过期" : user.disabled ? "已停用" : "正常"}</em></span>
+                    <span className="customer-access-actions">{user.expired && <button className="table-icon renew-catalog-action" type="button" disabled={renewingId !== null} onClick={() => void renewCustomerAccount(user)} aria-label={`为 ${user.name} 续期 15 天`} title="保留现有权限，为过期账号续期 15 天">{renewingId === user.id ? "续期中" : "续期"}</button>}<button className="table-icon share-catalog-action" type="button" disabled={user.disabled} onClick={() => void copyCustomerCatalogInvite(user)} aria-label={`复制发给 ${user.name} 的目录消息`} title={user.disabled ? "账号已停用，启用后才能邀请" : "复制目录链接和说明，粘贴到微信"}>发目录</button><button className="table-icon" type="button" onClick={() => openAccountEditor(user)} aria-label={`修改 ${user.name} 的账号`} title="修改账号、权限和密码"><PencilSimple size={17} weight="bold" /></button></span>
                   </div>
                 );
               })}

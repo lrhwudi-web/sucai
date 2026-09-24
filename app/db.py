@@ -567,6 +567,14 @@ def init_db(conn: sqlite3.Connection) -> None:
           ON catalog_events(event_type, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_catalog_events_user_created
           ON catalog_events(user_id, created_at DESC);
+        CREATE TABLE IF NOT EXISTS customer_account_renewals (
+          id INTEGER PRIMARY KEY,
+          customer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          renewed_by_user_id INTEGER NOT NULL REFERENCES users(id),
+          previous_expires_at TEXT NOT NULL,
+          new_expires_at TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
         """
     )
     edit_logs_table = conn.execute(
@@ -1433,6 +1441,7 @@ def list_customer_users(conn: sqlite3.Connection, created_by_user_id: int | None
     return conn.execute(
         f"""
         SELECT users.id, users.email, users.name, users.role, users.disabled, users.expires_at, users.created_at,
+               CASE WHEN users.expires_at IS NOT NULL AND datetime(users.expires_at) <= CURRENT_TIMESTAMP THEN 1 ELSE 0 END AS expired,
                users.created_by_user_id, COALESCE(creators.name, '') AS created_by_name,
                COALESCE(profiles.mode, 'role_default') AS permission_mode
         FROM users
@@ -2119,6 +2128,28 @@ def update_customer_user_with_permissions(
         """,
         (int(user_id),),
     ).fetchone()
+
+
+def renew_expired_customer_user(conn: sqlite3.Connection, user_id: int, renewed_by_user_id: int) -> sqlite3.Row:
+    disable_expired_customer_accounts(conn)
+    user = conn.execute(
+        "SELECT role, disabled, expires_at FROM users WHERE id=?", (int(user_id),)
+    ).fetchone()
+    if not user or normalize_role(user["role"]) not in CUSTOMER_ACCOUNT_ROLES:
+        raise ValueError("Customer user not found")
+    if not user["disabled"] or not user["expires_at"] or user["expires_at"] > utc_timestamp(datetime.now(timezone.utc)):
+        raise ValueError("Only expired customer accounts can be renewed")
+    next_expiry = customer_account_expiry()
+    with conn:
+        conn.execute(
+            "UPDATE users SET disabled=0, expires_at=? WHERE id=?",
+            (next_expiry, int(user_id)),
+        )
+        conn.execute(
+            "INSERT INTO customer_account_renewals(customer_user_id, renewed_by_user_id, previous_expires_at, new_expires_at) VALUES (?, ?, ?, ?)",
+            (int(user_id), int(renewed_by_user_id), user["expires_at"], next_expiry),
+        )
+    return conn.execute("SELECT id, expires_at, disabled FROM users WHERE id=?", (int(user_id),)).fetchone()
 
 
 def reset_customer_user_password(conn: sqlite3.Connection, user_id: int, password: str) -> None:

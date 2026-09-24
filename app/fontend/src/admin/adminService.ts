@@ -43,7 +43,7 @@ interface RawOverview {
 }
 
 interface RawCustomerAccessOverview {
-  users: Array<{ id: number; email: string; name: string; role: string; permission_mode?: string; disabled?: number | boolean; expires_at?: string; created_at: string; created_by_user_id?: number | null; created_by_name?: string }>;
+  users: Array<{ id: number; email: string; name: string; role: string; permission_mode?: string; disabled?: number | boolean; expired?: number | boolean; expires_at?: string; created_at: string; created_by_user_id?: number | null; created_by_name?: string }>;
   salespeople?: Array<{ id: number; email: string; name: string; role: string; disabled?: number | boolean }>;
   rules: Array<{ id: number; role: string; scope: string; value: string; created_at: string }>;
   user_grants: Array<{ id: number; user_id: number; name: string; email: string; scope: string; value: string; created_at: string }>;
@@ -435,6 +435,7 @@ export async function loadCustomerAccess(): Promise<CustomerAccessOverview> {
       role: payload.role_labels[user.role] || user.role,
       permissionMode: user.permission_mode === "allowlist" ? "allowlist" : "role_default",
       disabled: Boolean(Number(user.disabled || 0)),
+      expired: Boolean(Number(user.expired || 0)),
       createdAt: formatDate(user.created_at),
       expiresAt: user.expires_at ? formatDate(user.expires_at) : "",
       createdByUserId: user.created_by_user_id == null ? null : Number(user.created_by_user_id),
