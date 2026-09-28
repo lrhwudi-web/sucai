@@ -27,7 +27,8 @@ export async function createQuotationPdf(draft:QuoteDraft,products:MaterialProdu
   if(options.fontBytes){const {default:fontkit}=await import("@pdf-lib/fontkit");pdf.registerFontkit(fontkit);font=await pdf.embedFont(options.fontBytes,{subset:false});}
   const form=pdf.getForm(),layout=layoutOf(draft);
   // Amounts recalculate in the workbook and Excel. PDF collects the customer's quantities.
-  const columns=COLUMNS.filter(c=>c.key!=="amount"&&(["sku","quantity","note"].includes(c.key)||!layout.hidden.includes(c.key)));
+  const columns=COLUMNS.filter(c=>c.key!=="amount"&&(["sku","quantity","note"].includes(c.key)||!layout.hidden.includes(c.key))&&
+    (c.key!=="chineseName"||products.some((product,index)=>rawValue(draft,product,"chineseName",index+3).trim())));
   const totalWidth=columns.reduce((n,c)=>n+(layout.widths[c.key]||c.width),0),scale=(W-2*M)/totalWidth;
   const widths=columns.map(c=>(layout.widths[c.key]||c.width)*scale);
   const draw=(page:PDFPage,text:string,x:number,y:number,size=8,f=font,color=ink)=>page.drawText(text,{x,y,size,font:f,color});
@@ -39,7 +40,7 @@ export async function createQuotationPdf(draft:QuoteDraft,products:MaterialProdu
     y=H-33;page.drawRectangle({x:M,y:y-43,width:W-2*M,height:43,borderWidth:.9,borderColor:ink,color:white});
     const title=draft.title||"Craftsman Golf Accessories Catalog",titleFont=options.fontBytes?font:bold,size=Math.min(25,(W-2*M-24)/titleFont.widthOfTextAtSize(title,1));draw(page,title,(W-titleFont.widthOfTextAtSize(title,size))/2,y-29,size,titleFont);y-=43;
     if(first){draw(page,"Buyer / company",M,y-14,7,regular,muted);field(page,"buyer_company",M+82,y-21,236,18,"");draw(page,"Order reference / date",M+340,y-14,7,regular,muted);field(page,"buyer_order",M+441,y-21,218,18,"");y-=30;}
-    let x=M;columns.forEach((c,i)=>{page.drawRectangle({x,y:y-32,width:widths[i],height:32,borderWidth:.5,borderColor:ink,color:blue});const labels=c.label.replaceAll("–","-").split("\n");labels.forEach((t,j)=>{const size=Math.min(8,(widths[i]-8)/bold.widthOfTextAtSize(t,1));draw(page,t,x+(widths[i]-bold.widthOfTextAtSize(t,size))/2,y-(labels.length===1?19:12+j*11),size,bold);});x+=widths[i];});y-=32;
+    let x=M;columns.forEach((c,i)=>{page.drawRectangle({x,y:y-32,width:widths[i],height:32,borderWidth:.5,borderColor:ink,color:blue});const labels=c.label.replaceAll("–","-").split("\n"),headerFont=options.fontBytes?font:bold;labels.forEach((t,j)=>{const size=Math.min(8,(widths[i]-8)/headerFont.widthOfTextAtSize(t,1));draw(page,t,x+(widths[i]-headerFont.widthOfTextAtSize(t,size))/2,y-(labels.length===1?19:12+j*11),size,headerFont);});x+=widths[i];});y-=32;
   };
   addPage(true);
   for(let index=0;index<products.length;index++){

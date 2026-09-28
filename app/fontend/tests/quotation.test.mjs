@@ -63,7 +63,7 @@ test("Chinese company names and notes retain an editable CJK font", async () => 
   const draft = emptyDraft(); draft.company = "凯锐高尔夫";
   draft.lines["001"] = { name: "定制球杆套", price: "18.50", quantity: "100", note: "蓝色，单独包装" };
   const fontBytes = new Uint8Array(await readFile("public/fonts/NotoSansSC-Regular.ttf"));
-  const bytes = await createQuotationPdf(draft, [product("001")], { images: new Map(), fontBytes });
+  const bytes = await createQuotationPdf(draft, [{ ...product("001"), chineseName: "中文球杆套" }], { images: new Map(), fontBytes });
   const pdf = await PDFDocument.load(bytes);
   assert.equal(pdf.getForm().getTextField("item_0_note").getText(), "蓝色，单独包装");
   assert.ok(bytes.length < 7_000_000, `CJK PDF unexpectedly large: ${bytes.length}`);

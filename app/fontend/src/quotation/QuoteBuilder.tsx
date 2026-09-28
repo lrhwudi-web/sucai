@@ -4,6 +4,7 @@ import type { MaterialProduct } from "../types";
 import { AssetImage } from "../components/AssetImage";
 import { submitCustomerOrder, type CustomerOrder } from "../orders/orderService";
 import { recordCatalogEvent } from "./catalogEvents";
+import { preparePictures } from "./workbookMedia";
 import { columnLabel, columnsForCatalog, createCalculator, inventoryLimit, layoutOf, rawValue, sheetTotals } from "./workbookData";
 import { formatMoney, isQuotable, moveQuoteLine, priceCents, priceRangesOf, quantityValue, quoteProducts, type QuoteDraft } from "./quotation";
 
@@ -27,6 +28,8 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
   const [readyExcel, setReadyExcel] = useState<{ url: string; name: string; size: number } | null>(null);
   const [readyOrder, setReadyOrder] = useState<CustomerOrder | null>(null);
   const orderAttempt = useRef("");
+  const submittingOrder = useRef(false);
+  const orderPictures = useRef<{ products: MaterialProduct[]; overrides: Array<string | undefined>; promise: Promise<Map<string, string>> } | null>(null);
   const selected = quoteProducts(draft, products);
   const eligible = displayedProducts.filter(isQuotable);
   const exportProducts = canManageCatalogOrder && scope === "sheet" ? eligible : selected;
@@ -49,6 +52,21 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
   }, [open]);
 
   const set = (patch: Partial<QuoteDraft>) => onUpdate(d => ({ ...d, ...patch }));
+  const preparedOrderPictures = () => {
+    const current = orderPictures.current;
+    if (current && current.products.length === selected.length && selected.every((product, index) =>
+      product === current.products[index] && draft.lines[product.sku]?.photoData === current.overrides[index]
+    )) return current.promise;
+    const promise = preparePictures(draft, selected, () => {});
+    // Prefetch starts before confirmation, so handle a rejection even if the dialog is closed.
+    void promise.catch(() => {});
+    orderPictures.current = {
+      products: selected,
+      overrides: selected.map(product => draft.lines[product.sku]?.photoData),
+      promise,
+    };
+    return promise;
+  };
   const exportExcel = async () => {
     setError("");
     if (!draft.title.trim()) { setError("Enter a catalog title before exporting."); return; }
@@ -68,8 +86,8 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
   };
 
   const placeOrder = async () => {
+    if (readyOrder || submittingOrder.current) return;
     setError("");
-    if (!draft.title.trim()) { setError("Enter an order title before placing the order."); return; }
     if (!exportProducts.length) { setError("Select at least one product before placing an order."); return; }
     if (exportProducts.some(product => (quantityValue(draft.lines[product.sku]?.quantity || "") || 0) <= 0)) {
       setError("Enter a quantity greater than zero for every selected product."); return;
@@ -87,12 +105,12 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
       const value = draft.lines[p.sku]?.[key as "price" | "priceBulk"];
       return value && priceCents(value) === null;
     }))) { setError("Complete the unit prices, or leave them blank to request a quote."); return; }
-    if (!window.confirm(`Place this order for ${totals.quantity.toLocaleString()} pieces across ${exportProducts.length} products?`)) return;
+    submittingOrder.current = true;
     setExporting(true);
     setProgress("Preparing the order Excel…");
     try {
       const { createCatalogExcel } = await import("./exportCatalog");
-      const excel = await createCatalogExcel(draft, exportProducts, setProgress, sheetColumns, { centerNote: true });
+      const excel = await createCatalogExcel(draft, exportProducts, setProgress, sheetColumns, { centerNote: true }, preparedOrderPictures());
       if (!orderAttempt.current) orderAttempt.current = crypto.randomUUID().replaceAll("-", "");
       setProgress("Submitting order…");
       const orderItems = exportProducts.map((product, row) => {
@@ -115,7 +133,7 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
         idempotencyKey: orderAttempt.current,
         excel: excel.blob,
         excelName: excel.name,
-        title: draft.title,
+        title: draft.title.trim() || "Customer order",
         company: draft.company,
         contact: draft.contact,
         reference: draft.reference,
@@ -136,13 +154,13 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
       } catch { /* The order remains saved when browser storage is unavailable. */ }
       orderAttempt.current = "";
       onNotify(result.notificationWarning || (excel.missingImages ? `Order placed. ${excel.missingImages} product photos were unavailable.` : "Order placed and your salesperson was notified."));
-    } catch (e) { setError(e instanceof Error ? e.message : "The order could not be submitted. Please try again."); }
-    finally { setExporting(false); setProgress(""); }
+    } catch (e) { orderPictures.current = null; setError(e instanceof Error ? e.message : "The order could not be submitted. Please try again."); }
+    finally { submittingOrder.current = false; setExporting(false); setProgress(""); }
   };
 
   return <>
     <button className="quote-button is-primary" disabled={canManageCatalogOrder ? !selected.length && !eligible.length : !selected.length}
-      onClick={() => { setError(""); setScope(selected.length ? "selected" : "sheet"); setOpen(true); if (!canManageCatalogOrder) recordCatalogEvent("checkout_open"); }}>
+      onClick={() => { setError(""); setScope(selected.length ? "selected" : "sheet"); setOpen(true); if (!canManageCatalogOrder) { recordCatalogEvent("checkout_open"); void preparedOrderPictures(); } }}>
       {canManageCatalogOrder ? <FileXls size={18} /> : <ShoppingCartSimple size={18} />}{canManageCatalogOrder ? "Export Excel" : "Place order"}{selected.length > 0 && <span>{selected.length}</span>}
     </button>
     <dialog ref={dialog} className="quote-dialog" aria-labelledby="quote-dialog-title"
@@ -158,17 +176,25 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
           <div><strong>Order submitted successfully</strong><span>Order {readyOrder.orderNumber} · {readyOrder.fileName}</span></div>
           <a href={readyOrder.downloadUrl}><FileXls size={18} aria-hidden="true" />Download order Excel</a>
         </div>}
-        <fieldset disabled={exporting} className="quote-details-grid"><legend className="quote-sr-only">{canManageCatalogOrder ? "Excel export details" : "Order details"}</legend>
-          <label className="quote-title-field">{canManageCatalogOrder ? "Catalog title" : "Order title"}<input value={draft.title} maxLength={120} onChange={e => set({ title: e.target.value })} /></label>
-          {canManageCatalogOrder ? <label>Products to export<select value={scope} onChange={e => setScope(e.target.value as "selected" | "sheet")}>
+        {canManageCatalogOrder ? <fieldset disabled={exporting} className="quote-details-grid"><legend className="quote-sr-only">Excel export details</legend>
+          <label className="quote-title-field">Catalog title<input value={draft.title} maxLength={120} onChange={e => set({ title: e.target.value })} /></label>
+          <label>Products to export<select value={scope} onChange={e => setScope(e.target.value as "selected" | "sheet")}>
             <option value="selected" disabled={!selected.length}>Selected products ({selected.length})</option>
             <option value="sheet">Current worksheet ({eligible.length})</option>
-          </select></label> : <label>Order products<input value={`${selected.length} selected products`} readOnly /></label>}
+          </select></label>
           <label>Your company<input value={draft.company} placeholder="Company name" maxLength={120} onChange={e => set({ company: e.target.value })} /></label>
           <label>Reply-to contact<input value={draft.contact} placeholder="Email or phone" maxLength={120} onChange={e => set({ contact: e.target.value })} /></label>
           <label>Quote reference<input value={draft.reference} placeholder="Optional" maxLength={120} onChange={e => set({ reference: e.target.value })} /></label>
-          <label>Currency<select value={draft.currency} disabled={!canManageCatalogOrder} onChange={e => set({ currency: e.target.value })}>{["USD", "EUR", "GBP", "CAD", "AUD", "CNY", "JPY"].map(currency => <option key={currency}>{currency}</option>)}</select></label>
-        </fieldset>
+          <label>Currency<select value={draft.currency} onChange={e => set({ currency: e.target.value })}>{["USD", "EUR", "GBP", "CAD", "AUD", "CNY", "JPY"].map(currency => <option key={currency}>{currency}</option>)}</select></label>
+        </fieldset> : <details className="quote-optional-details">
+          <summary>Add PO reference or contact details <span>Optional</span></summary>
+          <fieldset disabled={exporting || !!readyOrder} className="quote-details-grid is-customer"><legend className="quote-sr-only">Optional order details</legend>
+            <label>PO reference<input value={draft.reference} placeholder="Your PO number" maxLength={120} onChange={e => set({ reference: e.target.value })} /></label>
+            <label>Your company<input value={draft.company} placeholder="Company name" maxLength={120} onChange={e => set({ company: e.target.value })} /></label>
+            <label>Reply-to contact<input value={draft.contact} placeholder="Email or phone" maxLength={120} onChange={e => set({ contact: e.target.value })} /></label>
+            <label>Order label<input value={draft.title} placeholder="Customer order" maxLength={120} onChange={e => set({ title: e.target.value })} /></label>
+          </fieldset>
+        </details>}
         {canManageCatalogOrder && <div className="quote-column-options"><strong>Visible columns</strong>{sheetColumns.map(c => <label key={c.key}>
           <input type="checkbox" checked={!layout.hidden.includes(c.key)} disabled={exporting}
             onChange={e => {
@@ -200,8 +226,8 @@ export function QuoteBuilder({ draft, products, displayedProducts, canManageCata
           <div className="quote-totals"><strong>{exportProducts.length} products{!canManageCatalogOrder&&<> <span>·</span> {totals.quantity.toLocaleString()} pcs</>}</strong>
             {!canManageCatalogOrder&&<span>{totals.unpriced ? "Priced subtotal" : "Subtotal"}: <b>{formatMoney(totals.amountCents, draft.currency)}</b>{totals.unpriced > 0 && ` · ${totals.unpriced} awaiting price`}</span>}</div>
           {selected.length > 0 && <button className="quote-button" disabled={exporting} onClick={() => { onUpdate(d => ({ ...d, order: [] })); setScope("sheet"); }}><ArrowCounterClockwise size={16} />Clear selection</button>}
-          <button className="quote-button is-primary" disabled={!exportProducts.length || exporting} onClick={canManageCatalogOrder ? exportExcel : placeOrder}>
-            {exporting ? <SpinnerGap className="is-spinning" size={18} /> : canManageCatalogOrder ? <FileXls size={18} /> : <ShoppingCartSimple size={18} />}{exporting ? progress : canManageCatalogOrder ? "Download Excel" : "Confirm order"}
+          <button className="quote-button is-primary" disabled={!exportProducts.length || exporting || (!canManageCatalogOrder && !!readyOrder)} onClick={canManageCatalogOrder ? exportExcel : placeOrder}>
+            {exporting ? <SpinnerGap className="is-spinning" size={18} /> : readyOrder && !canManageCatalogOrder ? <CheckCircle size={18} /> : canManageCatalogOrder ? <FileXls size={18} /> : <ShoppingCartSimple size={18} />}{exporting ? progress : readyOrder && !canManageCatalogOrder ? "Order sent" : canManageCatalogOrder ? "Download Excel" : "Confirm order"}
           </button>
         </footer>
         {readyExcel && <div className="wb-download"><span>Excel ready · {Math.ceil(readyExcel.size / 1024)} KB</span><a href={readyExcel.url} download={readyExcel.name}>Save Excel file</a></div>}
