@@ -1,7 +1,8 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState, type FormEvent } from "react";
 import { MagnifyingGlass, SquaresFour, Table } from "@phosphor-icons/react";
 import type { MaterialProduct } from "../types";
 import { AssetImage } from "../components/AssetImage";
+import { addProductMessage } from "../services/materials";
 import { thumbnailVariantUrl } from "../utils/thumbnails";
 import { ProductImageGallery } from "./ProductImageGallery";
 import { QuoteBuilder } from "./QuoteBuilder";
@@ -28,6 +29,11 @@ export function CustomerCatalog({
   const [category, setCategory] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [gallery, setGallery] = useState<MaterialProduct | null>(null);
+  const [inquirySku, setInquirySku] = useState("");
+  const [inquiryText, setInquiryText] = useState("");
+  const [inquirySubmitting, setInquirySubmitting] = useState(false);
+  const [inquiryError, setInquiryError] = useState("");
+  const [inquirySentSku, setInquirySentSku] = useState("");
   const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase());
   const available = useMemo(() => products.filter(isQuotable), [products]);
   const selected = useMemo(() => quoteProducts(draft, products), [draft, products]);
@@ -67,6 +73,31 @@ export function CustomerCatalog({
     }
     onEdit(product.sku, { quantity: value });
     if (value && Number(value) > 0 && !selectedSkus.has(product.sku)) recordCatalogEvent("product_added", product.sku);
+  };
+
+  const startInquiry = (product: MaterialProduct) => {
+    setInquirySku(product.sku);
+    setInquiryText(`Please confirm availability and lead time for SKU ${product.sku}.`);
+    setInquiryError("");
+    setInquirySentSku("");
+  };
+
+  const sendInquiry = async (event: FormEvent<HTMLFormElement>, sku: string) => {
+    event.preventDefault();
+    const message = inquiryText.trim();
+    if (!message || inquirySubmitting) return;
+    setInquirySubmitting(true);
+    setInquiryError("");
+    try {
+      await addProductMessage(sku, message);
+      setInquirySentSku(sku);
+      setInquirySku("");
+      setInquiryText("");
+    } catch (error) {
+      setInquiryError(error instanceof Error ? error.message : "Your inquiry could not be saved. Please try again.");
+    } finally {
+      setInquirySubmitting(false);
+    }
   };
 
   return <main className="customer-catalog" aria-label="Customer product catalog">
@@ -121,7 +152,16 @@ export function CustomerCatalog({
                 </div>
                 <span className={`customer-product-stock${limit === null || limit === 0 ? " is-unavailable" : ""}`}>{stockLabel(product, limit)}</span>
                 {isSelected ? <div className="customer-product-quantity"><label>Qty<input type="number" inputMode="numeric" min="1" max={Math.min(limit ?? 999999, 999999)} value={quantity} onChange={event => changeQuantity(product, event.target.value)} aria-label={`Quantity for ${product.sku}`} /></label><button type="button" onClick={() => { onToggle([product.sku], false); recordCatalogEvent("product_removed", product.sku); }}>Remove</button></div>
-                  : <button type="button" className="customer-product-add" disabled={limit === null || limit < 1} onClick={() => changeQuantity(product, "1")}>Add to order</button>}
+                  : limit === null || limit < 1 ? <button type="button" className="customer-product-inquire" disabled={inquirySubmitting} onClick={() => startInquiry(product)}>Ask about availability</button>
+                  : <button type="button" className="customer-product-add" onClick={() => changeQuantity(product, "1")}>Add to order</button>}
+                {inquirySku === product.sku && <form className="customer-product-inquiry" onSubmit={event => void sendInquiry(event, product.sku)}>
+                  <label htmlFor={`inquiry-${product.sku}`}>Ask the admin team</label>
+                  <textarea id={`inquiry-${product.sku}`} value={inquiryText} maxLength={1000} rows={3} onChange={event => setInquiryText(event.target.value)} />
+                  <span>The admin team can review your question after you send it. This does not place an order.</span>
+                  {inquiryError && <span role="alert" className="customer-product-inquiry-error">{inquiryError}</span>}
+                  <div><button type="button" onClick={() => setInquirySku("")} disabled={inquirySubmitting}>Cancel</button><button type="submit" disabled={!inquiryText.trim() || inquirySubmitting}>{inquirySubmitting ? "Sending…" : "Send inquiry"}</button></div>
+                </form>}
+                {inquirySentSku === product.sku && <span className="customer-product-inquiry-success" role="status">Inquiry saved for the admin team to review.</span>}
                 {isSelected && qty > 0 && <span className="customer-product-subtotal">{effectivePrice === null ? "Price to be confirmed" : `Est. ${formatMoney(effectivePrice * qty, draft.currency)}`}</span>}
               </div>
             </article>;
