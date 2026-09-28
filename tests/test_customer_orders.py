@@ -229,34 +229,6 @@ class CustomerOrderTest(unittest.TestCase):
         self.assertEqual(main.api_pending_customer_order_count(self.salesperson)["pending_count"], 0)
         self.assertEqual(main.api_pending_customer_order_count(self.super_admin)["pending_count"], 0)
 
-    def test_customer_inquiries_are_scoped_to_salesperson_and_can_be_followed_up(self):
-        with closing(db.connect()) as conn:
-            other_customer = db.create_customer_user_with_permissions(
-                conn, "other-buyer@example.com", "Other Buyer", "overseas_customer",
-                "password123", created_by_user_id=self.other_salesperson_id,
-            )
-            own_message = db.create_product_message(conn, self.customer_id, "SKU-001", "Is this available next week?")
-            other_message = db.create_product_message(conn, int(other_customer["id"]), "SKU-001", "Do you have a blue version?")
-
-        own_list = main.api_admin_messages(q="SKU-001", open_only=True, user=self.salesperson)
-        other_list = main.api_admin_messages(q="SKU-001", open_only=True, user=self.other_salesperson)
-        all_list = main.api_admin_messages(q="SKU-001", open_only=True, user=self.super_admin)
-        self.assertEqual([item["id"] for item in own_list["messages"]], [own_message["id"]])
-        self.assertEqual([item["id"] for item in other_list["messages"]], [other_message["id"]])
-        self.assertEqual(all_list["total"], 2)
-        self.assertEqual(main.api_pending_customer_order_count(self.salesperson)["pending_inquiry_count"], 1)
-        self.assertEqual(main.api_pending_customer_order_count(self.other_salesperson)["pending_inquiry_count"], 1)
-
-        with self.assertRaises(HTTPException) as denied:
-            main.api_mark_admin_message_handled(int(other_message["id"]), user=self.salesperson)
-        self.assertEqual(denied.exception.status_code, 404)
-        handled = main.api_mark_admin_message_handled(int(own_message["id"]), user=self.salesperson)
-        self.assertTrue(handled["message"]["handled_at"])
-        self.assertEqual(main.api_pending_customer_order_count(self.salesperson)["pending_inquiry_count"], 0)
-        self.assertEqual(main.api_admin_messages(open_only=True, user=self.salesperson)["total"], 0)
-        self.assertEqual(main.api_admin_messages(open_only=False, user=self.salesperson)["total"], 1)
-        self.assertEqual(main.api_pending_customer_order_count(self.super_admin)["pending_inquiry_count"], 1)
-
     def test_rejects_order_quantity_above_current_inventory(self):
         main.inventory_source.lookup_available_inventory = lambda _skus, _salesperson="": InventoryLookup(
             {"SKU-001": 4, "SKU-002": 10}, "live", "2026-09-11T16:31:00+08:00"

@@ -340,7 +340,6 @@ class DingTalkAuthTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             conn = db.connect(Path(tmp) / "test.db")
             db.init_db(conn)
-            admin_id = db.create_user(conn, "sales@example.com", "Sales", "admin", "password123")
             original_connect = db.connect
             db.connect = lambda *_args, **_kwargs: conn
             try:
@@ -350,7 +349,7 @@ class DingTalkAuthTest(unittest.TestCase):
                         name=role,
                         role=role,
                         password="password123",
-                        user={"id": admin_id, "role": "admin"},
+                        user={"role": "admin"},
                     )
                 with self.assertRaises(HTTPException) as denied:
                     main.admin_create_user(
@@ -358,7 +357,7 @@ class DingTalkAuthTest(unittest.TestCase):
                         name="Internal",
                         role="internal_staff",
                         password="password123",
-                        user={"id": admin_id, "role": "admin"},
+                        user={"role": "admin"},
                     )
                 self.assertEqual(denied.exception.status_code, 403)
                 self.assertEqual(

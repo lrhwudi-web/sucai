@@ -11,7 +11,7 @@ IMAGES = FIXTURE / 'images'
 ADMIN_USER = {'id': 501, 'name': '黄彩丽', 'email': 'sales-a@example.test', 'role': 'admin', 'is_admin': True, 'is_super_admin': False}
 CUSTOMER_USER = {'id': 601, 'name': 'FLOG', 'email': 'info@gravityaxis.co.th', 'role': 'overseas_customer', 'is_admin': False, 'is_super_admin': False}
 USER = CUSTOMER_USER if os.getenv('PREVIEW_ROLE') == 'customer' else ADMIN_USER
-CATALOG = {'owner_user_id': 501, 'owner_name': ADMIN_USER['name'], 'sku_order': [], 'draft': None, 'revision': 0, 'updated_at': None, 'can_manage': USER['is_admin']}
+CATALOG = {'owner_user_id': 501, 'owner_name': USER['name'], 'sku_order': [], 'draft': None, 'revision': 0, 'updated_at': None, 'can_manage': True}
 LIVE_INVENTORY = {'5902160': 146, '5902211': 27, '7203131': 213, '7203132': 68, '5902287': 81}
 LIVE_METRICS = {
     '5900759': (8, 0, 8, 0, 0),

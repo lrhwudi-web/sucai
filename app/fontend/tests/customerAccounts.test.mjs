@@ -56,7 +56,7 @@ test("admin orders expose lifecycle status and refresh after an Excel download",
   assert.match(ordersPanel, /order-status-chip/);
   assert.match(ordersPanel, /handleAdminDownload/);
   assert.match(ordersPanel, /status: "confirmed"/);
-  assert.match(ordersPanel, /window\.setTimeout\(\(\) => \{\s*load\(\);\s*window\.dispatchEvent\(new Event\("kairay:pending-orders-changed"\)\);\s*\}, 900\)/);
+  assert.match(ordersPanel, /window\.setTimeout\(load, 900\)/);
 });
 
 test("customer orders use a monthly two-pane workspace with persistent details", () => {

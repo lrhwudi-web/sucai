@@ -24,21 +24,14 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [inviteName, setInviteName] = useState("");
   const emailRef = useRef<HTMLInputElement>(null);
-  const passwordRef = useRef<HTMLInputElement>(null);
-  const inviteHandled = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const dingtalkError = params.get("dingtalk_error");
-    const invite = params.get("invite");
-    if (invite) params.delete("invite");
     if (dingtalkError) {
       setError(dingtalkError);
       params.delete("dingtalk_error");
-    }
-    if (invite || dingtalkError) {
       const query = params.toString();
       window.history.replaceState(
         null,
@@ -46,27 +39,7 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
         `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
       );
     }
-    if (invite && !inviteHandled.current) {
-      inviteHandled.current = true;
-      void fetch("/api/catalog-invites/open", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: invite }),
-        credentials: "include",
-      }).then(async response => {
-        if (!response.ok) throw new Error("This invitation has expired. Ask your salesperson for a new link.");
-        return response.json() as Promise<{ email: string; name: string }>;
-      }).then(customer => {
-        setEmail(customer.email);
-        setInviteName(customer.name);
-        passwordRef.current?.focus();
-      }).catch(caught => {
-        setNotice(caught instanceof Error ? caught.message : "Please sign in with your account.");
-        emailRef.current?.focus();
-      });
-    } else {
-      emailRef.current?.focus();
-    }
+    emailRef.current?.focus();
   }, []);
 
   const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
@@ -107,16 +80,16 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
 
       <section className="login-command-auth" aria-labelledby="login-title">
         <div className="login-command-content">
-          <BrandMark className="login-command-brand" subtitle="Client Catalog & Orders" />
+          <BrandMark className="login-command-brand" subtitle="Client Asset Center" />
 
           <div className="login-command-kicker">
             <ShieldCheck size={18} weight="bold" aria-hidden="true" />
-            <span>KAIRAY GOLF · CLIENT CATALOG</span>
+            <span>KAIRAY GOLF · CLIENT ASSET PORTAL</span>
           </div>
 
           <header className="login-command-heading">
-            <h1 id="login-title">{inviteName ? `Welcome, ${inviteName}` : "See products. Build your order."}</h1>
-            <p>{inviteName ? "Your catalog is ready. Enter your password to view products and build an order." : "Sign in with your business email to check your catalog and order online."}</p>
+            <h1 id="login-title">Sign in to your Asset Center</h1>
+            <p>Use your approved business email to access your client library.</p>
           </header>
 
           <form className="login-command-form" onSubmit={submitLogin}>
@@ -139,7 +112,6 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
               <span>Password</span>
               <span className="login-command-input has-action">
                 <input
-                  ref={passwordRef}
                   type={passwordVisible ? "text" : "password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
@@ -165,6 +137,7 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
             {notice && <p className="login-message" role="status">{notice}</p>}
 
             <div className="login-form-options">
+              <label><input type="checkbox" /> <span>Remember me</span></label>
               <button
                 type="button"
                 onClick={() => setNotice("Contact your KAIRAY GOLF representative to reset your password.")}
@@ -176,7 +149,7 @@ export function LandingPage({ onLoginSuccess }: LandingPageProps) {
             <button className="login-submit" type="submit" disabled={submitting}>
               {submitting
                 ? <><SpinnerGap size={20} weight="bold" /> Signing in</>
-                : <>Open my catalog <ArrowRight size={20} weight="bold" /></>}
+                : <>Sign in to Asset Center <ArrowRight size={20} weight="bold" /></>}
             </button>
           </form>
 

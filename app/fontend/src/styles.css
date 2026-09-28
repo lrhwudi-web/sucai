@@ -6916,32 +6916,6 @@ body.is-resizing-filters * {
   font-size: 10px;
 }
 
-.message-filters {
-  display: flex;
-  gap: 5px;
-  margin-bottom: 14px;
-  padding: 4px;
-  width: fit-content;
-  background: #e9efe9;
-  border-radius: 8px;
-}
-
-.message-filters button {
-  min-height: 35px;
-  padding: 6px 14px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--forest-800);
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.message-filters button.is-active {
-  background: var(--paper);
-  box-shadow: var(--shadow-sm);
-}
-
 .message-search-state {
   min-height: 38px;
   display: flex;
@@ -7081,22 +7055,6 @@ body.is-resizing-filters * {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.admin-message-card > footer button {
-  margin-left: auto;
-  min-height: 32px;
-  padding: 5px 10px;
-  border: 1px solid #9fc4a8;
-  border-radius: 6px;
-  background: #eaf5ec;
-  color: #246442;
-  font-size: 11px;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.admin-message-card > footer button:disabled { opacity: .55; cursor: not-allowed; }
-.admin-message-card > footer .message-handled { margin-left: auto; color: #28734d; }
 
 .admin-heading-actions {
   display: flex;
@@ -13692,17 +13650,17 @@ body {
 }
 
 .customer-access-table {
-  min-width: 1000px;
+  min-width: 1050px;
   overflow-x: auto;
 }
 
 .customer-access-row {
   min-height: 82px;
   display: grid;
-  grid-template-columns: minmax(210px, 1.55fr) minmax(90px, .65fr) minmax(180px, 1.3fr) minmax(130px, 1fr) minmax(100px, .7fr) 75px 165px;
+  grid-template-columns: minmax(230px, 1.55fr) minmax(100px, .65fr) minmax(210px, 1.3fr) minmax(150px, 1fr) minmax(105px, .7fr) 88px 54px;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 16px;
+  padding: 12px 22px;
   border-bottom: 1px solid #eee5df;
 }
 
@@ -13726,12 +13684,6 @@ body {
   align-items: center;
   gap: 12px;
 }
-
-.customer-account-cell > span { min-width: 0; }
-.customer-follow-up { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#78847a;font-size:11px;font-style:normal; }
-.customer-follow-up.is-interest { color:#a55d1e; }
-.customer-follow-up.is-viewed,.customer-follow-up.is-shared { color:#346d50; }
-.customer-follow-up.is-ordered { color:#a51f25;font-weight:700; }
 
 .customer-account-cell > i,
 .account-summary-card > i,
@@ -13907,30 +13859,6 @@ button.permission-chip.is-more:focus-visible {
 .customer-access-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
-}
-
-.customer-access-actions .share-catalog-action {
-  width: auto;
-  min-width: 54px;
-  padding: 0 5px;
-  color: var(--access-red);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.customer-access-actions .share-catalog-action:disabled {
-  color: #aa9e99;
-  cursor: not-allowed;
-}
-
-.customer-access-actions .renew-catalog-action {
-  width: auto;
-  min-width: 48px;
-  padding: 0 5px;
-  color: #246846;
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .customer-access-actions .table-icon {

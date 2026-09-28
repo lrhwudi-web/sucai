@@ -14,7 +14,7 @@ const materials = read("src", "services", "materials.ts");
 const workbook = read("src", "quotation", "WorkbookSheet.tsx");
 
 test("ordinary admins receive the scoped customer-management workspace", () => {
-  assert.match(app, /<AdminPanel[^>]*pendingInquiryCount=\{pendingInquiryCount\}[^>]*customerOnly \/>/);
+  assert.match(app, /<AdminPanel user=\{currentUser\} search=\{search\} onNotify=\{setToast\} customerOnly \/>/);
   assert.match(adminPanel, /customerOnly \? \(/);
   assert.match(adminPanel, /<CustomerAccessWorkspace/);
   assert.match(adminPanel, /<OrdersPanel user=\{user\}/);

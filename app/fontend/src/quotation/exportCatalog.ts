@@ -4,8 +4,8 @@ import { buildCatalogXlsx, type CatalogXlsxOptions } from "./excelCatalog";
 import { COLUMNS, type WorkbookColumn } from "./workbookData";
 import { downloadBytes, preparePictures } from "./workbookMedia";
 
-export async function createCatalogExcel(draft: QuoteDraft, products: MaterialProduct[], onProgress: (message: string) => void, columns: WorkbookColumn[] = COLUMNS, options: CatalogXlsxOptions = {}, preparedPictures?: Promise<Map<string, string>>) {
-  const photos = await (preparedPictures || preparePictures(draft, products, onProgress));
+export async function createCatalogExcel(draft: QuoteDraft, products: MaterialProduct[], onProgress: (message: string) => void, columns: WorkbookColumn[] = COLUMNS, options: CatalogXlsxOptions = {}) {
+  const photos = await preparePictures(draft, products, onProgress);
   onProgress("Creating Excel catalog…");
   const bytes = await buildCatalogXlsx(draft, products, photos, columns, options);
   const name = (draft.reference || "Craftsman_Golf_Catalog").replace(/[^\p{L}\p{N}_ -]/gu, "_").trim().slice(0, 70);

@@ -1,7 +1,5 @@
 import {
   Fragment,
-  lazy,
-  Suspense,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -22,6 +20,9 @@ import {
   SpinnerGap,
   X,
 } from "@phosphor-icons/react";
+import { AdminPanel } from "./admin/AdminPanel";
+import { SuperAdminPanel } from "./admin/SuperAdminPanel";
+import { OrdersPanel } from "./orders/OrdersPanel";
 import { loadPendingCustomerOrderCount } from "./orders/orderService";
 import { FilterSidebar } from "./components/FilterSidebar";
 import { Header } from "./components/Header";
@@ -57,10 +58,6 @@ import { useQuotation } from "./quotation/useQuotation";
 import { arrangeProducts, catalogDraftFingerprint, useCatalogOrder } from "./quotation/catalogOrder";
 import { emptyLine, isQuotable, MAX_QUOTE_PRODUCTS, setQuoteSelection, type QuoteLine } from "./quotation/quotation";
 import "./quotation/quotation.css";
-
-const AdminPanel = lazy(() => import("./admin/AdminPanel").then(module => ({ default: module.AdminPanel })));
-const SuperAdminPanel = lazy(() => import("./admin/SuperAdminPanel").then(module => ({ default: module.SuperAdminPanel })));
-const OrdersPanel = lazy(() => import("./orders/OrdersPanel").then(module => ({ default: module.OrdersPanel })));
 
 const emptyFilters: ProductFilters = {
   brand: [],
@@ -135,7 +132,6 @@ export function App() {
   const [driveJob, setDriveJob] = useState<DriveJob | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [pendingNotificationCount, setPendingNotificationCount] = useState(0);
-  const [pendingInquiryCount, setPendingInquiryCount] = useState(0);
   const [batchNotificationState, setBatchNotificationState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [filterPanelWidth, setFilterPanelWidth] = useState(loadFilterPanelWidth);
   const [resizingFilters, setResizingFilters] = useState(false);
@@ -143,9 +139,8 @@ export function App() {
   const filterResizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
   const filterResizeCleanupRef = useRef<(() => void) | null>(null);
   const reportedBatchRef = useRef("");
-  const trackedSignedInInvite = useRef("");
   const quotation = useQuotation(currentUser ? `${currentUser.id}:${currentUser.email}` : "");
-  const catalogOrder = useCatalogOrder(currentUser?.id ?? null, currentUser?.isAdmin ?? false);
+  const catalogOrder = useCatalogOrder(currentUser?.id ?? null);
   const orderedCatalogProducts = useMemo(() => arrangeProducts(products, catalogOrder.skuOrder), [products, catalogOrder.skuOrder]);
   const catalogTemplateKey = useMemo(() => catalogDraftFingerprint(catalogOrder.draft), [catalogOrder.draft]);
   const quoteSelected = new Set(quotation.draft.order);
@@ -185,7 +180,7 @@ export function App() {
         setCurrentUser(user);
         const requestedView = viewFromHash();
         if (!user && requestedView !== "landing") {
-          if (requestedView !== "quotation" && requestedView !== "orders") window.location.hash = "";
+          window.location.hash = "";
           setActiveView("landing");
         } else if (user && requestedView === "landing") {
           window.location.hash = "catalogue";
@@ -205,7 +200,7 @@ export function App() {
         setCurrentUser(null);
         setToast(error instanceof Error ? error.message : "We could not connect to the account service.");
         if (viewFromHash() !== "landing") {
-          if (viewFromHash() !== "quotation" && viewFromHash() !== "orders") window.location.hash = "";
+          window.location.hash = "";
           setActiveView("landing");
         }
       })
@@ -216,37 +211,16 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (sessionLoading || !currentUser) return;
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("invite");
-    if (!token || trackedSignedInInvite.current === token) return;
-    trackedSignedInInvite.current = token;
-    params.delete("invite");
-    const query = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
-    void fetch("/api/catalog-invites/open", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    }).catch(() => { /* Invitation tracking must not block the catalog. */ });
-  }, [sessionLoading, currentUser]);
-
-  useEffect(() => {
     if (!currentUser?.isAdmin) {
       setPendingNotificationCount(0);
-      setPendingInquiryCount(0);
       return;
     }
 
     let cancelled = false;
     const refreshNotifications = () => {
       loadPendingCustomerOrderCount()
-        .then((counts) => {
-          if (!cancelled) {
-            setPendingNotificationCount(counts.orders);
-            setPendingInquiryCount(counts.inquiries);
-          }
+        .then((count) => {
+          if (!cancelled) setPendingNotificationCount(count);
         })
         .catch(() => undefined);
     };
@@ -258,14 +232,12 @@ export function App() {
     const interval = window.setInterval(refreshNotifications, 30_000);
     window.addEventListener("focus", refreshNotifications);
     window.addEventListener("kairay:pending-orders-changed", refreshNotifications);
-    window.addEventListener("kairay:pending-inquiries-changed", refreshNotifications);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
       window.removeEventListener("focus", refreshNotifications);
       window.removeEventListener("kairay:pending-orders-changed", refreshNotifications);
-      window.removeEventListener("kairay:pending-inquiries-changed", refreshNotifications);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [currentUser?.id, currentUser?.isAdmin]);
@@ -311,7 +283,7 @@ export function App() {
     const syncViewFromHash = () => {
       const nextView = viewFromHash();
       if (!sessionLoading && nextView !== "landing" && !currentUser) {
-        if (nextView !== "quotation" && nextView !== "orders") window.location.hash = "";
+        window.location.hash = "";
         setActiveView("landing");
         return;
       }
@@ -746,11 +718,9 @@ export function App() {
   };
 
   const handleLoginSuccess = (user: AuthUser) => {
-    const requestedView = viewFromHash();
-    const destination = requestedView === "quotation" || requestedView === "orders" ? requestedView : "catalogue";
     setCurrentUser(user);
-    setActiveView(destination);
-    window.history.replaceState(null, "", `#${destination}`);
+    setActiveView("catalogue");
+    window.history.replaceState(null, "", "#catalogue");
     setFiltersOpen(false);
     setSearch("");
     setFavoriteOnly(false);
@@ -774,13 +744,11 @@ export function App() {
             onToggleFilters={() => setFiltersOpen(true)}
             onNotify={setToast}
             pendingNotificationCount={pendingNotificationCount}
-            pendingInquiryCount={pendingInquiryCount}
             onLogout={handleLogout}
             loggingOut={loggingOut}
             user={currentUser}
           />
 
-      <Suspense fallback={<div className="app-boot" role="status">Opening page…</div>}>
       {activeView === "catalogue" ? <>
       <div
         className={`workspace ${selectedProduct ? "has-drawer" : ""}`}
@@ -1020,11 +988,10 @@ export function App() {
             navigate("quotation");
           }} />
       ) : activeView === "admin" ? (
-        <AdminPanel user={currentUser} search={search} onNotify={setToast} pendingInquiryCount={pendingInquiryCount} customerOnly />
+        <AdminPanel user={currentUser} search={search} onNotify={setToast} customerOnly />
       ) : (
         <SuperAdminPanel user={currentUser} onNotify={setToast} />
       )}
-      </Suspense>
         </>
       )}
 

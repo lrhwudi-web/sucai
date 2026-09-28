@@ -113,17 +113,14 @@ export async function loadCustomerOrders(): Promise<CustomerOrder[]> {
   return payload.orders.map(mapOrder);
 }
 
-export async function loadPendingCustomerOrderCount(): Promise<{ orders: number; inquiries: number }> {
+export async function loadPendingCustomerOrderCount(): Promise<number> {
   const response = await fetch("/api/orders/pending-count", {
     headers: { Accept: "application/json" },
     credentials: "include",
   });
   if (!response.ok) throw new Error(await errorMessage(response, "Pending orders could not be loaded."));
-  const payload = await response.json() as { pending_count?: number; pending_inquiry_count?: number };
-  return {
-    orders: Math.max(0, Number(payload.pending_count || 0)),
-    inquiries: Math.max(0, Number(payload.pending_inquiry_count || 0)),
-  };
+  const payload = await response.json() as { pending_count?: number };
+  return Math.max(0, Number(payload.pending_count || 0));
 }
 
 export async function loadCustomerOrder(orderId: number): Promise<CustomerOrder> {

@@ -116,23 +116,10 @@ export interface AdminUser {
   role: string;
   permissionMode: "role_default" | "allowlist";
   disabled: boolean;
-  expired?: boolean;
   createdAt: string;
   expiresAt?: string;
   createdByUserId?: number | null;
   createdByName?: string;
-  catalogEngagement?: {
-    shareCopies: number;
-    lastShareCopyAt: string;
-    inviteOpens: number;
-    lastInviteOpenAt: string;
-    catalogViews: number;
-    lastCatalogViewAt: string;
-    productAdds: number;
-    lastProductAddAt: string;
-    orderCount: number;
-    lastOrderAt: string;
-  };
 }
 
 export interface SalespersonOption {
@@ -189,7 +176,6 @@ export interface AdminMessage {
   userName: string;
   userEmail: string;
   createdAt: string;
-  handledAt: string;
 }
 
 export interface SyncStatus {

@@ -20,7 +20,6 @@ interface HeaderProps {
   onToggleFilters: () => void;
   onNotify: (message: string) => void;
   pendingNotificationCount: number;
-  pendingInquiryCount: number;
   onLogout: () => void;
   loggingOut: boolean;
   user: AuthUser;
@@ -32,7 +31,6 @@ export function Header({
   onToggleFilters,
   onNotify,
   pendingNotificationCount,
-  pendingInquiryCount,
   onLogout,
   loggingOut,
   user,
@@ -40,7 +38,6 @@ export function Header({
   const isAdminSurface = activeView === "admin" || activeView === "super-admin" || (activeView === "orders" && user.isAdmin);
   const canAdmin = user.isAdmin;
   const canSuperAdmin = user.isSuperAdmin;
-  const totalNotificationCount = pendingNotificationCount + pendingInquiryCount;
   const accountName = user.name || user.email;
   const accountInitial = accountName.slice(0, 1).toUpperCase();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -76,14 +73,7 @@ export function Header({
       onNotify(`还有 ${pendingNotificationCount} 个订单未确认`);
       return;
     }
-    if (canAdmin && pendingInquiryCount > 0) {
-      sessionStorage.setItem("kairay.admin.section", "messages");
-      onNavigate("admin");
-      window.setTimeout(() => window.dispatchEvent(new CustomEvent("kairay:open-admin-section", { detail: "messages" })), 0);
-      onNotify(`还有 ${pendingInquiryCount} 条客户询问待跟进`);
-      return;
-    }
-    onNotify(isAdminSurface ? "当前没有待处理订单或客户询问" : "You are all caught up—no new order notifications.");
+    onNotify(isAdminSurface ? "当前没有未确认订单" : "You are all caught up—no new order notifications.");
   };
 
   return (
@@ -133,12 +123,12 @@ export function Header({
         <button
           className="icon-button notification-button"
           onClick={openNotifications}
-          aria-label={canAdmin && totalNotificationCount > 0 ? `还有 ${pendingNotificationCount} 个订单未确认，${pendingInquiryCount} 条客户询问待跟进` : (isAdminSurface ? "当前没有待处理订单或客户询问" : "View notifications")}
+          aria-label={canAdmin && pendingNotificationCount > 0 ? `还有 ${pendingNotificationCount} 个订单未确认` : (isAdminSurface ? "当前没有未确认订单" : "View notifications")}
         >
           <BellSimple size={20} weight="bold" />
-          {canAdmin && totalNotificationCount > 0 && (
+          {canAdmin && pendingNotificationCount > 0 && (
             <span className="notification-badge" aria-hidden="true">
-              {totalNotificationCount > 99 ? "99+" : totalNotificationCount}
+              {pendingNotificationCount > 99 ? "99+" : pendingNotificationCount}
             </span>
           )}
         </button>

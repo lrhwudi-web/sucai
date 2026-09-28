@@ -291,18 +291,15 @@ class CustomerAccessTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             conn = db.connect(Path(tmp) / "test.db")
             db.init_db(conn)
-            admin_id = db.create_user(conn, "sales@example.com", "Sales", "admin", "password123")
             db.create_user(conn, "buyer@example.com", "Buyer", "overseas_customer", "password123")
             buyer = conn.execute("SELECT id FROM users WHERE email='buyer@example.com'").fetchone()
-            conn.execute("UPDATE users SET created_by_user_id=? WHERE id=?", (admin_id, int(buyer["id"])))
-            conn.commit()
             db.create_role_rule(conn, "overseas_customer", "other", "No Brand")
             db.create_user_grant(conn, int(buyer["id"]), "brand", "01 Craftsman Golf")
 
             original_connect = db.connect
             db.connect = lambda *_args, **_kwargs: conn
             try:
-                payload = main.api_admin_access_control(user={"id": admin_id, "role": "admin"})
+                payload = main.api_admin_access_control(user={"id": 2, "role": "admin"})
             finally:
                 db.connect = original_connect
                 conn.close()
@@ -310,37 +307,6 @@ class CustomerAccessTest(unittest.TestCase):
             self.assertEqual(payload["rules"][0]["value"], "No Brand")
             self.assertEqual(payload["user_grants"][0]["email"], "buyer@example.com")
             self.assertIn("other", payload["permission_values"])
-
-    def test_expired_customer_can_be_renewed_without_changing_permissions(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            conn = db.connect(Path(tmp) / "test.db")
-            db.init_db(conn)
-            admin_id = db.create_user(conn, "sales@example.com", "Sales", "admin", "password123")
-            customer = db.create_customer_user_with_permissions(
-                conn, "renew@example.com", "Renew", "overseas_customer", "password123",
-                permission_mode="allowlist", grants=[("brand", "01 Craftsman Golf")],
-                created_by_user_id=admin_id,
-            )
-            customer_id = int(customer["id"])
-            conn.execute("UPDATE users SET expires_at='2020-01-01 00:00:00' WHERE id=?", (customer_id,))
-            conn.commit()
-            self.assertTrue(next(row for row in db.list_customer_users(conn, admin_id) if row["id"] == customer_id)["expired"])
-            before = [(row["scope"], row["value"]) for row in db.user_grants(conn, customer_id)]
-            original_connect = db.connect
-            db.connect = lambda *_args, **_kwargs: conn
-            try:
-                with self.assertRaises(HTTPException) as denied:
-                    main.api_admin_renew_customer_user(customer_id, user={"id": admin_id + 100, "role": "admin"})
-                self.assertEqual(denied.exception.status_code, 403)
-                renewed = main.api_admin_renew_customer_user(customer_id, user={"id": admin_id, "role": "admin"})
-            finally:
-                db.connect = original_connect
-            self.assertEqual(renewed["user"]["disabled"], 0)
-            self.assertGreater(renewed["user"]["expires_at"], "2020-01-01 00:00:00")
-            self.assertEqual([(row["scope"], row["value"]) for row in db.user_grants(conn, customer_id)], before)
-            audit = conn.execute("SELECT renewed_by_user_id, previous_expires_at FROM customer_account_renewals WHERE customer_user_id=?", (customer_id,)).fetchone()
-            self.assertEqual((audit["renewed_by_user_id"], audit["previous_expires_at"]), (admin_id, "2020-01-01 00:00:00"))
-            conn.close()
 
     def test_customer_cannot_pass_admin_guard(self):
         with self.assertRaises(HTTPException) as denied:

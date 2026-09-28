@@ -43,8 +43,7 @@ interface RawOverview {
 }
 
 interface RawCustomerAccessOverview {
-  users: Array<{ id: number; email: string; name: string; role: string; permission_mode?: string; disabled?: number | boolean; expired?: number | boolean; expires_at?: string; created_at: string; created_by_user_id?: number | null; created_by_name?: string }>;
-  engagement?: Array<{ user_id: number; share_copies: number; last_share_copy_at?: string | null; invite_opens?: number; last_invite_open_at?: string | null; catalog_views: number; last_catalog_view_at?: string | null; product_adds: number; last_product_add_at?: string | null; order_count: number; last_order_at?: string | null }>;
+  users: Array<{ id: number; email: string; name: string; role: string; permission_mode?: string; disabled?: number | boolean; expires_at?: string; created_at: string; created_by_user_id?: number | null; created_by_name?: string }>;
   salespeople?: Array<{ id: number; email: string; name: string; role: string; disabled?: number | boolean }>;
   rules: Array<{ id: number; role: string; scope: string; value: string; created_at: string }>;
   user_grants: Array<{ id: number; user_id: number; name: string; email: string; scope: string; value: string; created_at: string }>;
@@ -428,7 +427,6 @@ export async function loadCustomerAccess(): Promise<CustomerAccessOverview> {
   });
   if (!response.ok) throw new Error(`客户权限数据加载失败（${response.status}）`);
   const payload = await response.json() as RawCustomerAccessOverview;
-  const engagementByUser = new Map((payload.engagement || []).map((item) => [Number(item.user_id), item]));
   return {
     users: payload.users.map((user) => ({
       id: Number(user.id),
@@ -437,22 +435,10 @@ export async function loadCustomerAccess(): Promise<CustomerAccessOverview> {
       role: payload.role_labels[user.role] || user.role,
       permissionMode: user.permission_mode === "allowlist" ? "allowlist" : "role_default",
       disabled: Boolean(Number(user.disabled || 0)),
-      expired: Boolean(Number(user.expired || 0)),
       createdAt: formatDate(user.created_at),
       expiresAt: user.expires_at ? formatDate(user.expires_at) : "",
       createdByUserId: user.created_by_user_id == null ? null : Number(user.created_by_user_id),
       createdByName: text(user.created_by_name),
-      catalogEngagement: (() => {
-        const item = engagementByUser.get(Number(user.id));
-        return item ? {
-          shareCopies: Number(item.share_copies || 0), lastShareCopyAt: item.last_share_copy_at ? formatDate(item.last_share_copy_at) : "",
-          inviteOpens: Number(item.invite_opens || 0), lastInviteOpenAt: item.last_invite_open_at ? formatDate(item.last_invite_open_at) : "",
-          catalogViews: Number(item.catalog_views || 0), lastCatalogViewAt: item.last_catalog_view_at ? formatDate(item.last_catalog_view_at) : "",
-          productAdds: Number(item.product_adds || 0), lastProductAddAt: item.last_product_add_at ? formatDate(item.last_product_add_at) : "",
-          orderCount: Number(item.order_count || 0),
-          lastOrderAt: item.last_order_at ? formatDate(item.last_order_at) : "",
-        } : undefined;
-      })(),
     })),
     salespeople: (payload.salespeople || []).map((salesperson) => ({
       id: Number(salesperson.id),
@@ -481,9 +467,9 @@ export async function loadCustomerAccess(): Promise<CustomerAccessOverview> {
   };
 }
 
-export async function loadAdminMessages(q = "", openOnly = false): Promise<{ messages: AdminMessage[]; total: number }> {
+export async function loadAdminMessages(q = ""): Promise<{ messages: AdminMessage[]; total: number }> {
   if (!apiEnabled()) return { messages: [], total: 0 };
-  const query = new URLSearchParams({ q, limit: "200", offset: "0", open_only: String(openOnly) });
+  const query = new URLSearchParams({ q, limit: "200", offset: "0" });
   const response = await fetch(`/api/admin/messages?${query}`, {
     headers: { Accept: "application/json" },
     credentials: "include",
@@ -499,20 +485,9 @@ export async function loadAdminMessages(q = "", openOnly = false): Promise<{ mes
       userName: text(row.user_name),
       userEmail: text(row.user_email),
       createdAt: formatDate(row.created_at),
-      handledAt: text(row.handled_at),
     })),
     total: Number(payload.total || 0),
   };
-}
-
-export async function markAdminMessageHandled(messageId: number): Promise<void> {
-  if (!apiEnabled()) return;
-  const response = await fetch(`/api/admin/messages/${messageId}/handled`, {
-    method: "POST",
-    headers: { Accept: "application/json" },
-    credentials: "include",
-  });
-  if (!response.ok) throw new Error(`客户询问更新失败（${response.status}）`);
 }
 
 export async function postAdminAction(path: string, data: Record<string, string | number | boolean | Array<string | number>> = {}) {

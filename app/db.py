@@ -528,8 +528,6 @@ def init_db(conn: sqlite3.Connection) -> None:
           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           sku TEXT NOT NULL,
           body TEXT NOT NULL,
-          handled_at TEXT,
-          handled_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_product_messages_user_sku
@@ -558,44 +556,6 @@ def init_db(conn: sqlite3.Connection) -> None:
           ON user_activity_events(user_id, created_at DESC, id DESC);
         CREATE INDEX IF NOT EXISTS idx_user_activity_type_created
           ON user_activity_events(event_type, created_at DESC, id DESC);
-        CREATE TABLE IF NOT EXISTS catalog_events (
-          id INTEGER PRIMARY KEY,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          event_type TEXT NOT NULL CHECK(event_type IN ('catalog_view','search','product_open','product_added','product_removed','checkout_open')),
-          sku TEXT NOT NULL DEFAULT '',
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE INDEX IF NOT EXISTS idx_catalog_events_type_created
-          ON catalog_events(event_type, created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_catalog_events_user_created
-          ON catalog_events(user_id, created_at DESC);
-        CREATE TABLE IF NOT EXISTS customer_catalog_share_copies (
-          id INTEGER PRIMARY KEY,
-          customer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          copied_by_user_id INTEGER NOT NULL REFERENCES users(id),
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE INDEX IF NOT EXISTS idx_customer_catalog_share_customer
-          ON customer_catalog_share_copies(customer_user_id, created_at DESC);
-        CREATE TABLE IF NOT EXISTS customer_catalog_invites (
-          token_hash TEXT PRIMARY KEY,
-          customer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          created_by_user_id INTEGER NOT NULL REFERENCES users(id),
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          expires_at TEXT NOT NULL,
-          open_count INTEGER NOT NULL DEFAULT 0,
-          last_opened_at TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_customer_catalog_invites_customer
-          ON customer_catalog_invites(customer_user_id, created_at DESC);
-        CREATE TABLE IF NOT EXISTS customer_account_renewals (
-          id INTEGER PRIMARY KEY,
-          customer_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          renewed_by_user_id INTEGER NOT NULL REFERENCES users(id),
-          previous_expires_at TEXT NOT NULL,
-          new_expires_at TEXT NOT NULL,
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
         """
     )
     edit_logs_table = conn.execute(
@@ -631,12 +591,6 @@ def init_db(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(sync_status)").fetchall()}
     if "root_id" not in columns:
         conn.execute("ALTER TABLE sync_status ADD COLUMN root_id TEXT NOT NULL DEFAULT ''")
-    message_columns = {row["name"] for row in conn.execute("PRAGMA table_info(product_messages)").fetchall()}
-    if "handled_at" not in message_columns:
-        conn.execute("ALTER TABLE product_messages ADD COLUMN handled_at TEXT")
-    if "handled_by_user_id" not in message_columns:
-        conn.execute("ALTER TABLE product_messages ADD COLUMN handled_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_product_messages_open ON product_messages(handled_at, created_at DESC)")
     file_columns = {row["name"] for row in conn.execute("PRAGMA table_info(files)").fetchall()}
     if "thumbnail_link" not in file_columns:
         conn.execute("ALTER TABLE files ADD COLUMN thumbnail_link TEXT NOT NULL DEFAULT ''")
@@ -935,25 +889,17 @@ def admin_product_messages(
     q: str = "",
     limit: int = 200,
     offset: int = 0,
-    owner_user_id: int | None = None,
-    open_only: bool = False,
 ) -> dict[str, object]:
     q = q.strip()
-    conditions: list[str] = []
+    where = ""
     args: list[object] = []
-    if owner_user_id is not None:
-        conditions.append("u.created_by_user_id=?")
-        args.append(int(owner_user_id))
-    if open_only:
-        conditions.append("pm.handled_at IS NULL")
     if q:
         like = f"%{q}%"
-        conditions.append(
-            "(pm.sku LIKE ? OR pm.body LIKE ? OR u.name LIKE ? OR u.email LIKE ? "
-            "OR COALESCE(meta.english_name, '') LIKE ?)"
+        where = (
+            "WHERE pm.sku LIKE ? OR pm.body LIKE ? OR u.name LIKE ? OR u.email LIKE ? "
+            "OR COALESCE(meta.english_name, '') LIKE ?"
         )
-        args.extend([like] * 5)
-    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        args = [like] * 5
     total = conn.execute(
         f"""
         SELECT COUNT(*)
@@ -966,7 +912,7 @@ def admin_product_messages(
     ).fetchone()[0]
     rows = conn.execute(
         f"""
-        SELECT pm.id, pm.sku, pm.body, pm.created_at, pm.handled_at, pm.handled_by_user_id,
+        SELECT pm.id, pm.sku, pm.body, pm.created_at,
           u.id AS user_id, u.name AS user_name, u.email AS user_email,
           COALESCE(meta.english_name, '') AS product_name
         FROM product_messages pm
@@ -979,41 +925,6 @@ def admin_product_messages(
         [*args, max(1, min(limit, 500)), max(0, offset)],
     ).fetchall()
     return {"messages": [dict(row) for row in rows], "total": int(total)}
-
-
-def pending_product_message_count(conn: sqlite3.Connection, owner_user_id: int | None = None) -> int:
-    if owner_user_id is None:
-        row = conn.execute("SELECT COUNT(*) FROM product_messages WHERE handled_at IS NULL").fetchone()
-    else:
-        row = conn.execute(
-            """SELECT COUNT(*) FROM product_messages pm
-               JOIN users customer ON customer.id=pm.user_id
-               WHERE pm.handled_at IS NULL AND customer.created_by_user_id=?""",
-            (int(owner_user_id),),
-        ).fetchone()
-    return int(row[0])
-
-
-def mark_product_message_handled(
-    conn: sqlite3.Connection, message_id: int, handled_by_user_id: int, owner_user_id: int | None = None,
-) -> sqlite3.Row | None:
-    owner_filter = "AND customer.created_by_user_id=?" if owner_user_id is not None else ""
-    args: tuple[int, ...] = (int(message_id), int(owner_user_id)) if owner_user_id is not None else (int(message_id),)
-    row = conn.execute(
-        f"""SELECT pm.id FROM product_messages pm
-            JOIN users customer ON customer.id=pm.user_id
-            WHERE pm.id=? {owner_filter}""",
-        args,
-    ).fetchone()
-    if not row:
-        return None
-    conn.execute(
-        """UPDATE product_messages SET handled_at=CURRENT_TIMESTAMP, handled_by_user_id=?
-           WHERE id=? AND handled_at IS NULL""",
-        (int(handled_by_user_id), int(message_id)),
-    )
-    conn.commit()
-    return conn.execute("SELECT * FROM product_messages WHERE id=?", (int(message_id),)).fetchone()
 
 
 def user_favorite_skus(conn: sqlite3.Connection, user_id: int) -> set[str]:
@@ -1511,92 +1422,11 @@ def list_customer_users(conn: sqlite3.Connection, created_by_user_id: int | None
     return conn.execute(
         f"""
         SELECT users.id, users.email, users.name, users.role, users.disabled, users.expires_at, users.created_at,
-               CASE WHEN users.expires_at IS NOT NULL AND datetime(users.expires_at) <= CURRENT_TIMESTAMP THEN 1 ELSE 0 END AS expired,
                users.created_by_user_id, COALESCE(creators.name, '') AS created_by_name,
                COALESCE(profiles.mode, 'role_default') AS permission_mode
         FROM users
         LEFT JOIN user_permission_profiles profiles ON profiles.user_id=users.id
         LEFT JOIN users creators ON creators.id=users.created_by_user_id
-        WHERE users.role IN ({placeholders})
-          AND (? IS NULL OR users.created_by_user_id=?)
-        ORDER BY users.id DESC
-        """,
-        (*CUSTOMER_ACCOUNT_ROLES, created_by_user_id, created_by_user_id),
-    ).fetchall()
-
-
-def record_customer_catalog_share_copy(conn: sqlite3.Connection, customer_user_id: int, copied_by_user_id: int) -> None:
-    with conn:
-        conn.execute(
-            "INSERT INTO customer_catalog_share_copies(customer_user_id, copied_by_user_id) VALUES (?, ?)",
-            (int(customer_user_id), int(copied_by_user_id)),
-        )
-
-
-def create_customer_catalog_invite(conn: sqlite3.Connection, customer_user_id: int, created_by_user_id: int, token_hash: str) -> None:
-    with conn:
-        conn.execute(
-            """INSERT INTO customer_catalog_invites(token_hash, customer_user_id, created_by_user_id, expires_at)
-               VALUES (?, ?, ?, datetime('now', '+30 days'))""",
-            (token_hash, int(customer_user_id), int(created_by_user_id)),
-        )
-
-
-def open_customer_catalog_invite(conn: sqlite3.Connection, token_hash: str) -> sqlite3.Row | None:
-    with conn:
-        invite = conn.execute(
-            """SELECT invites.customer_user_id, users.email, users.name
-               FROM customer_catalog_invites invites JOIN users ON users.id=invites.customer_user_id
-               WHERE invites.token_hash=? AND invites.expires_at>CURRENT_TIMESTAMP
-                 AND users.disabled=0 AND (users.expires_at IS NULL OR datetime(users.expires_at)>CURRENT_TIMESTAMP)""",
-            (token_hash,),
-        ).fetchone()
-        if invite:
-            conn.execute(
-                """UPDATE customer_catalog_invites
-                   SET open_count=open_count+1, last_opened_at=CURRENT_TIMESTAMP
-                   WHERE token_hash=?""",
-                (token_hash,),
-            )
-    return invite
-
-
-def customer_catalog_engagement(conn: sqlite3.Connection, created_by_user_id: int | None = None) -> list[sqlite3.Row]:
-    placeholders = ",".join("?" for _ in CUSTOMER_ACCOUNT_ROLES)
-    return conn.execute(
-        f"""
-        SELECT users.id AS user_id,
-               COALESCE(shares.share_copies, 0) AS share_copies,
-               shares.last_share_copy_at,
-               COALESCE(invites.invite_opens, 0) AS invite_opens,
-               invites.last_invite_open_at,
-               COALESCE(events.catalog_views, 0) AS catalog_views,
-               events.last_catalog_view_at,
-               COALESCE(events.product_adds, 0) AS product_adds,
-               events.last_product_add_at,
-               COALESCE(orders.order_count, 0) AS order_count,
-               orders.last_order_at
-        FROM users
-        LEFT JOIN (
-          SELECT customer_user_id, COUNT(*) AS share_copies, MAX(created_at) AS last_share_copy_at
-          FROM customer_catalog_share_copies GROUP BY customer_user_id
-        ) shares ON shares.customer_user_id=users.id
-        LEFT JOIN (
-          SELECT customer_user_id, SUM(open_count) AS invite_opens, MAX(last_opened_at) AS last_invite_open_at
-          FROM customer_catalog_invites GROUP BY customer_user_id
-        ) invites ON invites.customer_user_id=users.id
-        LEFT JOIN (
-          SELECT user_id,
-                 SUM(CASE WHEN event_type='catalog_view' THEN 1 ELSE 0 END) AS catalog_views,
-                 MAX(CASE WHEN event_type='catalog_view' THEN created_at END) AS last_catalog_view_at,
-                 SUM(CASE WHEN event_type='product_added' THEN 1 ELSE 0 END) AS product_adds,
-                 MAX(CASE WHEN event_type='product_added' THEN created_at END) AS last_product_add_at
-          FROM catalog_events GROUP BY user_id
-        ) events ON events.user_id=users.id
-        LEFT JOIN (
-          SELECT customer_user_id, COUNT(*) AS order_count, MAX(created_at) AS last_order_at
-          FROM customer_orders GROUP BY customer_user_id
-        ) orders ON orders.customer_user_id=users.id
         WHERE users.role IN ({placeholders})
           AND (? IS NULL OR users.created_by_user_id=?)
         ORDER BY users.id DESC
@@ -1614,20 +1444,6 @@ def list_salespeople(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         ORDER BY disabled ASC, name COLLATE NOCASE, id
         """
     ).fetchall()
-
-
-CATALOG_EVENT_TYPES = frozenset({"catalog_view", "search", "product_open", "product_added", "product_removed", "checkout_open"})
-
-
-def record_catalog_event(conn: sqlite3.Connection, user_id: int, event_type: str, sku: str = "") -> int:
-    if event_type not in CATALOG_EVENT_TYPES:
-        raise ValueError("Invalid catalog event type")
-    with conn:
-        cursor = conn.execute(
-            "INSERT INTO catalog_events(user_id, event_type, sku) VALUES (?, ?, ?)",
-            (int(user_id), event_type, sku.strip().upper()),
-        )
-    return int(cursor.lastrowid)
 
 
 def record_user_activity(
@@ -2278,28 +2094,6 @@ def update_customer_user_with_permissions(
         """,
         (int(user_id),),
     ).fetchone()
-
-
-def renew_expired_customer_user(conn: sqlite3.Connection, user_id: int, renewed_by_user_id: int) -> sqlite3.Row:
-    disable_expired_customer_accounts(conn)
-    user = conn.execute(
-        "SELECT role, disabled, expires_at FROM users WHERE id=?", (int(user_id),)
-    ).fetchone()
-    if not user or normalize_role(user["role"]) not in CUSTOMER_ACCOUNT_ROLES:
-        raise ValueError("Customer user not found")
-    if not user["disabled"] or not user["expires_at"] or user["expires_at"] > utc_timestamp(datetime.now(timezone.utc)):
-        raise ValueError("Only expired customer accounts can be renewed")
-    next_expiry = customer_account_expiry()
-    with conn:
-        conn.execute(
-            "UPDATE users SET disabled=0, expires_at=? WHERE id=?",
-            (next_expiry, int(user_id)),
-        )
-        conn.execute(
-            "INSERT INTO customer_account_renewals(customer_user_id, renewed_by_user_id, previous_expires_at, new_expires_at) VALUES (?, ?, ?, ?)",
-            (int(user_id), int(renewed_by_user_id), user["expires_at"], next_expiry),
-        )
-    return conn.execute("SELECT id, expires_at, disabled FROM users WHERE id=?", (int(user_id),)).fetchone()
 
 
 def reset_customer_user_password(conn: sqlite3.Connection, user_id: int, password: str) -> None:

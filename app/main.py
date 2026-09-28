@@ -2046,9 +2046,7 @@ def api_pending_customer_order_count(user=Depends(require_api_admin)):
             int(user["id"]),
             str(user["role"]),
         )
-        owner_id = None if user["role"] == "super_admin" else int(user["id"])
-        pending_inquiry_count = db.pending_product_message_count(conn, owner_id)
-    return {"pending_count": pending_count, "pending_inquiry_count": pending_inquiry_count}
+    return {"pending_count": pending_count}
 
 
 @app.get("/api/orders/{order_id}")
@@ -2513,27 +2511,6 @@ def api_record_original_open(
             file_id=str(row["id"]),
             file_name=row["name"],
         )
-    return {"recorded": True}
-
-
-@app.post("/api/catalog/events")
-def api_record_catalog_event(payload: dict = Body(...), user=Depends(require_api_user)):
-    if user["role"] not in CUSTOMER_ACCOUNT_ROLES:
-        raise HTTPException(403, detail="Customer account required")
-    event_type = payload.get("event_type")
-    sku = payload.get("sku", "")
-    if not isinstance(event_type, str) or event_type not in db.CATALOG_EVENT_TYPES:
-        raise HTTPException(400, detail="Invalid catalog event")
-    if not isinstance(sku, str) or len(sku) > 100:
-        raise HTTPException(400, detail="Invalid SKU")
-    sku = sku.strip().upper()
-    product_event = event_type in {"product_open", "product_added", "product_removed"}
-    if product_event != bool(sku):
-        raise HTTPException(400, detail="SKU does not match event type")
-    with db.connect() as conn:
-        if sku:
-            ensure_visible_sku(conn, sku, user["role"], int(user["id"]))
-        db.record_catalog_event(conn, int(user["id"]), event_type, sku)
     return {"recorded": True}
 
 
@@ -3004,7 +2981,6 @@ def api_admin_access_control(user=Depends(require_api_admin)):
         owner_id = None if user["role"] == "super_admin" else int(user["id"])
         return {
             "users": [dict(row) for row in db.list_customer_users(conn, owner_id)],
-            "engagement": [dict(row) for row in db.customer_catalog_engagement(conn, owner_id)],
             "salespeople": [dict(row) for row in db.list_salespeople(conn)] if user["role"] == "super_admin" else [],
             "rules": [dict(row) for row in db.list_role_rules(conn)],
             "user_grants": [dict(row) for row in db.list_user_grants(conn, owner_id)],
@@ -3012,54 +2988,6 @@ def api_admin_access_control(user=Depends(require_api_admin)):
             "role_labels": ROLE_LABELS,
             "scope_labels": RULE_SCOPE_LABELS,
         }
-
-
-@app.post("/api/admin/users/{user_id}/catalog-share-copy")
-def api_admin_record_catalog_share_copy(user_id: int, user=Depends(require_api_admin)):
-    with db.connect() as conn:
-        db.init_db(conn)
-        owner_id = None if user["role"] == "super_admin" else int(user["id"])
-        customer = next((row for row in db.list_customer_users(conn, owner_id) if row["id"] == user_id), None)
-        if customer is None:
-            raise HTTPException(404, "客户账号不存在或无权访问")
-        if customer["disabled"]:
-            raise HTTPException(409, "客户账号已停用，请先续期或启用")
-        db.record_customer_catalog_share_copy(conn, user_id, int(user["id"]))
-    return {"recorded": True}
-
-
-@app.post("/api/admin/users/{user_id}/catalog-invite")
-def api_admin_create_catalog_invite(user_id: int, token: str = Form(...), user=Depends(require_api_admin)):
-    if not re.fullmatch(r"[a-f0-9]{32}", token):
-        raise HTTPException(400, "邀请链接无效")
-    with closing(db.connect()) as conn:
-        db.init_db(conn)
-        owner_id = None if user["role"] == "super_admin" else int(user["id"])
-        customer = next((row for row in db.list_customer_users(conn, owner_id) if row["id"] == user_id), None)
-        if customer is None:
-            raise HTTPException(404, "客户账号不存在或无权访问")
-        if customer["disabled"] or customer["expired"]:
-            raise HTTPException(409, "客户账号已停用或过期，请先续期或启用")
-        db.create_customer_catalog_invite(
-            conn, user_id, int(user["id"]), hashlib.sha256(token.encode("utf-8")).hexdigest()
-        )
-    return {"created": True}
-
-
-@app.post("/api/catalog-invites/open")
-def api_open_catalog_invite(payload: dict = Body(...)):
-    token = payload.get("token")
-    if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", token):
-        raise HTTPException(404, "Catalog invitation unavailable")
-    with closing(db.connect()) as conn:
-        db.init_db(conn)
-        customer = db.open_customer_catalog_invite(conn, hashlib.sha256(token.encode("utf-8")).hexdigest())
-    if customer is None:
-        raise HTTPException(404, "Catalog invitation unavailable")
-    return JSONResponse(
-        {"email": customer["email"], "name": customer["name"]},
-        headers={"Cache-Control": "no-store"},
-    )
 
 
 @app.post("/api/admin/users")
@@ -3143,19 +3071,6 @@ def api_admin_update_customer_user(
     return {"user": dict(updated), "grants": grants}
 
 
-@app.post("/api/admin/users/{user_id}/renew")
-def api_admin_renew_customer_user(user_id: int, user=Depends(require_api_admin)):
-    with db.connect() as conn:
-        db.init_db(conn)
-        if user["role"] != "super_admin" and not db.customer_owned_by(conn, user_id, int(user["id"])):
-            raise HTTPException(403, "只能续期自己创建的客户账号")
-        try:
-            renewed = db.renew_expired_customer_user(conn, user_id, int(user["id"]))
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-    return {"user": dict(renewed)}
-
-
 @app.post("/api/admin/users/{user_id}/reset-password")
 def api_admin_reset_customer_password(user_id: int, user=Depends(require_api_admin)):
     groups = ("ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnopqrstuvwxyz", "23456789", "!@#$%")
@@ -3223,22 +3138,10 @@ def api_admin_messages(
     q: str = "",
     limit: int = 200,
     offset: int = 0,
-    open_only: bool = False,
-    user=Depends(require_api_admin),
+    user=Depends(require_api_super_admin),
 ):
-    with closing(db.connect()) as conn:
-        owner_id = None if user["role"] == "super_admin" else int(user["id"])
-        return db.admin_product_messages(conn, q=q, limit=limit, offset=offset, owner_user_id=owner_id, open_only=open_only)
-
-
-@app.post("/api/admin/messages/{message_id}/handled")
-def api_mark_admin_message_handled(message_id: int, user=Depends(require_api_admin)):
-    with closing(db.connect()) as conn:
-        owner_id = None if user["role"] == "super_admin" else int(user["id"])
-        row = db.mark_product_message_handled(conn, message_id, int(user["id"]), owner_id)
-    if not row:
-        raise HTTPException(404, "Customer inquiry not found")
-    return {"message": dict(row)}
+    with db.connect() as conn:
+        return db.admin_product_messages(conn, q=q, limit=limit, offset=offset)
 
 
 @app.get("/api/admin/products")

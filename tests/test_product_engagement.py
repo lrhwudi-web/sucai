@@ -8,23 +8,6 @@ from app import db, main
 
 
 class ProductEngagementTest(unittest.TestCase):
-    def test_existing_product_messages_gain_follow_up_columns_without_losing_rows(self):
-        with tempfile.TemporaryDirectory() as directory:
-            conn = db.connect(Path(directory) / "legacy.db")
-            conn.execute("""CREATE TABLE product_messages (
-                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, sku TEXT NOT NULL,
-                body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )""")
-            conn.execute("INSERT INTO product_messages(user_id, sku, body) VALUES (1, 'SKU-100', 'Legacy question')")
-            conn.commit()
-            db.init_db(conn)
-            columns = {row["name"] for row in conn.execute("PRAGMA table_info(product_messages)")}
-            self.assertTrue({"handled_at", "handled_by_user_id"}.issubset(columns))
-            self.assertEqual(conn.execute("SELECT body FROM product_messages").fetchone()[0], "Legacy question")
-            db.init_db(conn)
-            self.assertEqual(conn.execute("SELECT COUNT(*) FROM product_messages").fetchone()[0], 1)
-            conn.close()
-
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.path = Path(self.temp.name) / "engagement.db"
@@ -102,7 +85,6 @@ class ProductEngagementTest(unittest.TestCase):
         app = (root / "App.tsx").read_text(encoding="utf-8")
         drawer = (root / "components/ProductDrawer.tsx").read_text(encoding="utf-8")
         header = (root / "components/Header.tsx").read_text(encoding="utf-8")
-        product_search = (root / "components/ProductSearch.tsx").read_text(encoding="utf-8")
         brand = (root / "components/BrandMark.tsx").read_text(encoding="utf-8")
         landing = (root / "components/LandingPage.tsx").read_text(encoding="utf-8")
         filters = (root / "components/FilterSidebar.tsx").read_text(encoding="utf-8")
@@ -117,10 +99,10 @@ class ProductEngagementTest(unittest.TestCase):
         self.assertIn("Related sets containing SKU", app)
         self.assertIn("Comments & messages", drawer)
         self.assertIn("Set current image as cover", drawer)
-        self.assertIn('isAdmin && selectedAsset?.kind === "image"', drawer)
+        self.assertIn("isAdmin && selectedAsset.kind", drawer)
         self.assertIn("const canAdmin = user.isAdmin", header)
-        self.assertIn("Search by SKU, event, year or asset name", product_search)
-        self.assertNotIn("Search by SKU, product name, or Drive path", product_search)
+        self.assertIn("Search by SKU, event, year or asset name", header)
+        self.assertNotIn("Search by SKU, product name, or Drive path", header)
         self.assertIn("{canAdmin && (", header)
         self.assertNotIn("Drive location", drawer)
         self.assertNotIn("Copy path", drawer)
@@ -128,7 +110,7 @@ class ProductEngagementTest(unittest.TestCase):
         self.assertNotIn('target="_blank"', drawer)
         self.assertIn("KAIRAY GOLF", brand)
         self.assertIn("/assets/kairay-golf-logo.png", brand)
-        self.assertIn("KAIRAY GOLF · CLIENT CATALOG", landing)
+        self.assertIn("KAIRAY GOLF · CLIENT ASSET PORTAL", landing)
         self.assertIn('const dingtalkLoginUrl = "/api/auth/dingtalk/start"', landing)
         self.assertIn('params.get("dingtalk_error")', landing)
         self.assertIn("Sign in with DingTalk", landing)
@@ -153,7 +135,7 @@ class ProductEngagementTest(unittest.TestCase):
         self.assertIn("return hasProductFilters || !filters.other.length", app)
         self.assertNotIn("KOL & UCG", filters)
         self.assertNotIn("other: [], theme", app)
-        self.assertIn('rel="icon" type="image/png" href="/assets/kairay-golf-logo.png', index)
+        self.assertIn('rel="icon" type="image/png" href="/assets/kairay-golf-logo.png"', index)
         self.assertIn(".original-modal-media", styles)
         self.assertIn("overflow: hidden", styles)
         self.assertIn("/* Kairay admin workspace */", styles)
