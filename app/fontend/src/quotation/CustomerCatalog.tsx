@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useState, type FormEvent } from "
 import { MagnifyingGlass, SquaresFour, Table } from "@phosphor-icons/react";
 import type { MaterialProduct } from "../types";
 import { AssetImage } from "../components/AssetImage";
-import { addProductMessage } from "../services/materials";
+import { addProductMessage, loadMyProductMessages, type ProductMessage } from "../services/materials";
 import { thumbnailVariantUrl } from "../utils/thumbnails";
 import { ProductImageGallery } from "./ProductImageGallery";
 import { QuoteBuilder } from "./QuoteBuilder";
@@ -34,6 +34,8 @@ export function CustomerCatalog({
   const [inquirySubmitting, setInquirySubmitting] = useState(false);
   const [inquiryError, setInquiryError] = useState("");
   const [inquirySentSku, setInquirySentSku] = useState("");
+  const [pastInquiries, setPastInquiries] = useState<ProductMessage[]>([]);
+  const [pastInquiriesLoading, setPastInquiriesLoading] = useState(false);
   const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase());
   const available = useMemo(() => products.filter(isQuotable), [products]);
   const selected = useMemo(() => quoteProducts(draft, products), [draft, products]);
@@ -63,6 +65,17 @@ export function CustomerCatalog({
     const timer = window.setTimeout(() => recordCatalogEvent("search"), 700);
     return () => window.clearTimeout(timer);
   }, [deferredSearch]);
+  useEffect(() => {
+    if (!inquirySku) return;
+    let cancelled = false;
+    setPastInquiries([]);
+    setPastInquiriesLoading(true);
+    loadMyProductMessages(inquirySku)
+      .then(messages => { if (!cancelled) setPastInquiries(messages.slice(0, 3)); })
+      .catch(() => { if (!cancelled) setPastInquiries([]); })
+      .finally(() => { if (!cancelled) setPastInquiriesLoading(false); });
+    return () => { cancelled = true; };
+  }, [inquirySku]);
 
   const changeQuantity = (product: MaterialProduct, value: string) => {
     if (!/^\d{0,6}$/.test(value)) return;
@@ -158,6 +171,7 @@ export function CustomerCatalog({
                   <label htmlFor={`inquiry-${product.sku}`}>Ask your sales team</label>
                   <textarea id={`inquiry-${product.sku}`} value={inquiryText} maxLength={1000} rows={3} onChange={event => setInquiryText(event.target.value)} />
                   <span>Your sales team can review your question after you send it. This does not place an order.</span>
+                  {pastInquiriesLoading ? <span>Checking your earlier questions…</span> : pastInquiries.length > 0 && <div className="customer-product-inquiry-history"><strong>Your earlier questions about this SKU</strong>{pastInquiries.map(message => <p key={message.id}>{message.body}</p>)}</div>}
                   {inquiryError && <span role="alert" className="customer-product-inquiry-error">{inquiryError}</span>}
                   <div><button type="button" onClick={() => setInquirySku("")} disabled={inquirySubmitting}>Cancel</button><button type="submit" disabled={!inquiryText.trim() || inquirySubmitting}>{inquirySubmitting ? "Sending…" : "Send inquiry"}</button></div>
                 </form>}

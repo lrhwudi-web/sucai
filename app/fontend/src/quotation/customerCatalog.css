@@ -41,7 +41,10 @@
 .customer-product-inquiry textarea{width:100%;resize:vertical;padding:8px;border:1px solid #d6c4b2;border-radius:6px;font:inherit;font-size:13px;color:#26382e}
 .customer-product-inquiry>span{font-size:11px;line-height:1.4;color:#68766b}
 .customer-product-inquiry .customer-product-inquiry-error{color:#a5292b}
-.customer-product-inquiry div{display:flex;justify-content:flex-end;gap:7px}
+.customer-product-inquiry-history{display:grid;gap:5px;max-height:130px;overflow:auto;padding:8px;border-radius:6px;background:#f5f1e9;color:#52675a}
+.customer-product-inquiry-history strong{font-size:11px}
+.customer-product-inquiry-history p{margin:0;font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.customer-product-inquiry>div:last-child{display:flex;justify-content:flex-end;gap:7px}
 .customer-product-inquiry button{min-height:34px;padding:5px 9px;border:1px solid #c8d4c7;border-radius:6px;background:white;color:#315843;font-size:12px;font-weight:700;cursor:pointer}
 .customer-product-inquiry button[type="submit"]{border-color:#1f7049;background:#1f7049;color:white}
 .customer-product-inquiry button:disabled{opacity:.55;cursor:not-allowed}

@@ -55,7 +55,7 @@ export function AdminNav({ active, pendingCount, messageCount, customerCount, cu
       </nav>
       <div className="admin-system-state">
         <span className="state-dot" />
-        <div><strong>系统运行正常</strong><small>Drive 索引 · 已连接</small></div>
+        <div><strong>{customerOnly ? "客户服务工作台" : "素材管理工作台"}</strong><small>{customerOnly ? "目录 · 订单 · 客户询问" : "数据状态请查看同步与导入"}</small></div>
       </div>
     </aside>
   );
