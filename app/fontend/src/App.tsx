@@ -1,5 +1,7 @@
 import {
   Fragment,
+  lazy,
+  Suspense,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -20,9 +22,6 @@ import {
   SpinnerGap,
   X,
 } from "@phosphor-icons/react";
-import { AdminPanel } from "./admin/AdminPanel";
-import { SuperAdminPanel } from "./admin/SuperAdminPanel";
-import { OrdersPanel } from "./orders/OrdersPanel";
 import { loadPendingCustomerOrderCount } from "./orders/orderService";
 import { FilterSidebar } from "./components/FilterSidebar";
 import { Header } from "./components/Header";
@@ -58,6 +57,10 @@ import { useQuotation } from "./quotation/useQuotation";
 import { arrangeProducts, catalogDraftFingerprint, useCatalogOrder } from "./quotation/catalogOrder";
 import { emptyLine, isQuotable, MAX_QUOTE_PRODUCTS, setQuoteSelection, type QuoteLine } from "./quotation/quotation";
 import "./quotation/quotation.css";
+
+const AdminPanel = lazy(() => import("./admin/AdminPanel").then(module => ({ default: module.AdminPanel })));
+const SuperAdminPanel = lazy(() => import("./admin/SuperAdminPanel").then(module => ({ default: module.SuperAdminPanel })));
+const OrdersPanel = lazy(() => import("./orders/OrdersPanel").then(module => ({ default: module.OrdersPanel })));
 
 const emptyFilters: ProductFilters = {
   brand: [],
@@ -769,6 +772,7 @@ export function App() {
             user={currentUser}
           />
 
+      <Suspense fallback={<div className="app-boot" role="status">Opening page…</div>}>
       {activeView === "catalogue" ? <>
       <div
         className={`workspace ${selectedProduct ? "has-drawer" : ""}`}
@@ -1012,6 +1016,7 @@ export function App() {
       ) : (
         <SuperAdminPanel user={currentUser} onNotify={setToast} />
       )}
+      </Suspense>
         </>
       )}
 

@@ -12,7 +12,6 @@ import { columnLetter, parseAddress, shiftFormula } from "./formulas.ts";
 import { ColumnFilterMenu } from "./ColumnFilterMenu";
 import { filteredRecords, filterOptions, type ColumnFilters, type FilterRecord } from "./columnFilters.ts";
 import { ProductImageGallery } from "./ProductImageGallery";
-import { CustomerCatalog } from "./CustomerCatalog";
 import { catalogDraftFingerprint, completeCatalogOrder, groupCatalogProducts, moveCatalogProduct, type CatalogGroupKey } from "./catalogOrder";
 import { assertExcelImportSize } from "./excelImportPolicy";
 import { reportMissingSkus } from "../services/materials";
@@ -30,15 +29,7 @@ function orderedProducts(records:FilterRecord<MaterialProduct>[],filters:ColumnF
   if(sort)data.sort((a,b)=>a.values[sort.key].localeCompare(b.values[sort.key],undefined,{numeric:true})*sort.direction);
   return data.map(row=>row.product);
 }
-export function CatalogSheet(props: CatalogSheetProps) {
-  const [customerView, setCustomerView] = useState<"catalog" | "workbook">("catalog");
-  if (!props.canManageCatalogOrder && customerView === "catalog") {
-    return <CustomerCatalog {...props} onShowWorkbook={() => setCustomerView("workbook")} />;
-  }
-  return <WorkbookCatalogSheet {...props} onShowCards={props.canManageCatalogOrder ? undefined : () => setCustomerView("catalog")} />;
-}
-
-function WorkbookCatalogSheet({products,search,onSearchChange,draft,publishedCatalogDraft,loading,loadError,storageFailed,onRetry,onUpdate,onToggle,onEdit,onNotify,onOpenDrive,onSetCover,onUndo,onRedo,canUndo,canRedo,catalogOrderOwner,canManageCatalogOrder,catalogOrderLoading,catalogOrderSaving,catalogOrderError,onSaveCatalogOrder,onSaveCatalogOrderOnly,onShowCards}:Props){
+export function WorkbookCatalogSheet({products,search,onSearchChange,draft,publishedCatalogDraft,loading,loadError,storageFailed,onRetry,onUpdate,onToggle,onEdit,onNotify,onOpenDrive,onSetCover,onUndo,onRedo,canUndo,canRedo,catalogOrderOwner,canManageCatalogOrder,catalogOrderLoading,catalogOrderSaving,catalogOrderError,onSaveCatalogOrder,onSaveCatalogOrderOnly,onShowCards}:Props){
   const [sheet,setSheet]=useState<"all"|"selected">("all");
   const [filters,setFilters]=useState<ColumnFilters>({});
   const [sort,setSort]=useState<{key:ColumnKey;direction:1|-1}|null>(null);
