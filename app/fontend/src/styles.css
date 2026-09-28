@@ -6916,6 +6916,32 @@ body.is-resizing-filters * {
   font-size: 10px;
 }
 
+.message-filters {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 14px;
+  padding: 4px;
+  width: fit-content;
+  background: #e9efe9;
+  border-radius: 8px;
+}
+
+.message-filters button {
+  min-height: 35px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--forest-800);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.message-filters button.is-active {
+  background: var(--paper);
+  box-shadow: var(--shadow-sm);
+}
+
 .message-search-state {
   min-height: 38px;
   display: flex;
@@ -7055,6 +7081,22 @@ body.is-resizing-filters * {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.admin-message-card > footer button {
+  margin-left: auto;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid #9fc4a8;
+  border-radius: 6px;
+  background: #eaf5ec;
+  color: #246442;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.admin-message-card > footer button:disabled { opacity: .55; cursor: not-allowed; }
+.admin-message-card > footer .message-handled { margin-left: auto; color: #28734d; }
 
 .admin-heading-actions {
   display: flex;

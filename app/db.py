@@ -528,6 +528,8 @@ def init_db(conn: sqlite3.Connection) -> None:
           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           sku TEXT NOT NULL,
           body TEXT NOT NULL,
+          handled_at TEXT,
+          handled_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_product_messages_user_sku
@@ -629,6 +631,12 @@ def init_db(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(sync_status)").fetchall()}
     if "root_id" not in columns:
         conn.execute("ALTER TABLE sync_status ADD COLUMN root_id TEXT NOT NULL DEFAULT ''")
+    message_columns = {row["name"] for row in conn.execute("PRAGMA table_info(product_messages)").fetchall()}
+    if "handled_at" not in message_columns:
+        conn.execute("ALTER TABLE product_messages ADD COLUMN handled_at TEXT")
+    if "handled_by_user_id" not in message_columns:
+        conn.execute("ALTER TABLE product_messages ADD COLUMN handled_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_product_messages_open ON product_messages(handled_at, created_at DESC)")
     file_columns = {row["name"] for row in conn.execute("PRAGMA table_info(files)").fetchall()}
     if "thumbnail_link" not in file_columns:
         conn.execute("ALTER TABLE files ADD COLUMN thumbnail_link TEXT NOT NULL DEFAULT ''")
@@ -927,17 +935,25 @@ def admin_product_messages(
     q: str = "",
     limit: int = 200,
     offset: int = 0,
+    owner_user_id: int | None = None,
+    open_only: bool = False,
 ) -> dict[str, object]:
     q = q.strip()
-    where = ""
+    conditions: list[str] = []
     args: list[object] = []
+    if owner_user_id is not None:
+        conditions.append("u.created_by_user_id=?")
+        args.append(int(owner_user_id))
+    if open_only:
+        conditions.append("pm.handled_at IS NULL")
     if q:
         like = f"%{q}%"
-        where = (
-            "WHERE pm.sku LIKE ? OR pm.body LIKE ? OR u.name LIKE ? OR u.email LIKE ? "
-            "OR COALESCE(meta.english_name, '') LIKE ?"
+        conditions.append(
+            "(pm.sku LIKE ? OR pm.body LIKE ? OR u.name LIKE ? OR u.email LIKE ? "
+            "OR COALESCE(meta.english_name, '') LIKE ?)"
         )
-        args = [like] * 5
+        args.extend([like] * 5)
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
     total = conn.execute(
         f"""
         SELECT COUNT(*)
@@ -950,7 +966,7 @@ def admin_product_messages(
     ).fetchone()[0]
     rows = conn.execute(
         f"""
-        SELECT pm.id, pm.sku, pm.body, pm.created_at,
+        SELECT pm.id, pm.sku, pm.body, pm.created_at, pm.handled_at, pm.handled_by_user_id,
           u.id AS user_id, u.name AS user_name, u.email AS user_email,
           COALESCE(meta.english_name, '') AS product_name
         FROM product_messages pm
@@ -963,6 +979,41 @@ def admin_product_messages(
         [*args, max(1, min(limit, 500)), max(0, offset)],
     ).fetchall()
     return {"messages": [dict(row) for row in rows], "total": int(total)}
+
+
+def pending_product_message_count(conn: sqlite3.Connection, owner_user_id: int | None = None) -> int:
+    if owner_user_id is None:
+        row = conn.execute("SELECT COUNT(*) FROM product_messages WHERE handled_at IS NULL").fetchone()
+    else:
+        row = conn.execute(
+            """SELECT COUNT(*) FROM product_messages pm
+               JOIN users customer ON customer.id=pm.user_id
+               WHERE pm.handled_at IS NULL AND customer.created_by_user_id=?""",
+            (int(owner_user_id),),
+        ).fetchone()
+    return int(row[0])
+
+
+def mark_product_message_handled(
+    conn: sqlite3.Connection, message_id: int, handled_by_user_id: int, owner_user_id: int | None = None,
+) -> sqlite3.Row | None:
+    owner_filter = "AND customer.created_by_user_id=?" if owner_user_id is not None else ""
+    args: tuple[int, ...] = (int(message_id), int(owner_user_id)) if owner_user_id is not None else (int(message_id),)
+    row = conn.execute(
+        f"""SELECT pm.id FROM product_messages pm
+            JOIN users customer ON customer.id=pm.user_id
+            WHERE pm.id=? {owner_filter}""",
+        args,
+    ).fetchone()
+    if not row:
+        return None
+    conn.execute(
+        """UPDATE product_messages SET handled_at=CURRENT_TIMESTAMP, handled_by_user_id=?
+           WHERE id=? AND handled_at IS NULL""",
+        (int(handled_by_user_id), int(message_id)),
+    )
+    conn.commit()
+    return conn.execute("SELECT * FROM product_messages WHERE id=?", (int(message_id),)).fetchone()
 
 
 def user_favorite_skus(conn: sqlite3.Connection, user_id: int) -> set[str]:

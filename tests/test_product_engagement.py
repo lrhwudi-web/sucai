@@ -8,6 +8,23 @@ from app import db, main
 
 
 class ProductEngagementTest(unittest.TestCase):
+    def test_existing_product_messages_gain_follow_up_columns_without_losing_rows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            conn = db.connect(Path(directory) / "legacy.db")
+            conn.execute("""CREATE TABLE product_messages (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, sku TEXT NOT NULL,
+                body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            conn.execute("INSERT INTO product_messages(user_id, sku, body) VALUES (1, 'SKU-100', 'Legacy question')")
+            conn.commit()
+            db.init_db(conn)
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(product_messages)")}
+            self.assertTrue({"handled_at", "handled_by_user_id"}.issubset(columns))
+            self.assertEqual(conn.execute("SELECT body FROM product_messages").fetchone()[0], "Legacy question")
+            db.init_db(conn)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM product_messages").fetchone()[0], 1)
+            conn.close()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.path = Path(self.temp.name) / "engagement.db"

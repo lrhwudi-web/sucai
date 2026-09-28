@@ -155,13 +155,13 @@ export function CustomerCatalog({
                   : limit === null || limit < 1 ? <button type="button" className="customer-product-inquire" disabled={inquirySubmitting} onClick={() => startInquiry(product)}>Ask about availability</button>
                   : <button type="button" className="customer-product-add" onClick={() => changeQuantity(product, "1")}>Add to order</button>}
                 {inquirySku === product.sku && <form className="customer-product-inquiry" onSubmit={event => void sendInquiry(event, product.sku)}>
-                  <label htmlFor={`inquiry-${product.sku}`}>Ask the admin team</label>
+                  <label htmlFor={`inquiry-${product.sku}`}>Ask your sales team</label>
                   <textarea id={`inquiry-${product.sku}`} value={inquiryText} maxLength={1000} rows={3} onChange={event => setInquiryText(event.target.value)} />
-                  <span>The admin team can review your question after you send it. This does not place an order.</span>
+                  <span>Your sales team can review your question after you send it. This does not place an order.</span>
                   {inquiryError && <span role="alert" className="customer-product-inquiry-error">{inquiryError}</span>}
                   <div><button type="button" onClick={() => setInquirySku("")} disabled={inquirySubmitting}>Cancel</button><button type="submit" disabled={!inquiryText.trim() || inquirySubmitting}>{inquirySubmitting ? "Sending…" : "Send inquiry"}</button></div>
                 </form>}
-                {inquirySentSku === product.sku && <span className="customer-product-inquiry-success" role="status">Inquiry saved for the admin team to review.</span>}
+                {inquirySentSku === product.sku && <span className="customer-product-inquiry-success" role="status">Inquiry saved for your sales team to review.</span>}
                 {isSelected && qty > 0 && <span className="customer-product-subtotal">{effectivePrice === null ? "Price to be confirmed" : `Est. ${formatMoney(effectivePrice * qty, draft.currency)}`}</span>}
               </div>
             </article>;

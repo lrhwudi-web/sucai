@@ -481,9 +481,9 @@ export async function loadCustomerAccess(): Promise<CustomerAccessOverview> {
   };
 }
 
-export async function loadAdminMessages(q = ""): Promise<{ messages: AdminMessage[]; total: number }> {
+export async function loadAdminMessages(q = "", openOnly = false): Promise<{ messages: AdminMessage[]; total: number }> {
   if (!apiEnabled()) return { messages: [], total: 0 };
-  const query = new URLSearchParams({ q, limit: "200", offset: "0" });
+  const query = new URLSearchParams({ q, limit: "200", offset: "0", open_only: String(openOnly) });
   const response = await fetch(`/api/admin/messages?${query}`, {
     headers: { Accept: "application/json" },
     credentials: "include",
@@ -499,9 +499,20 @@ export async function loadAdminMessages(q = ""): Promise<{ messages: AdminMessag
       userName: text(row.user_name),
       userEmail: text(row.user_email),
       createdAt: formatDate(row.created_at),
+      handledAt: text(row.handled_at),
     })),
     total: Number(payload.total || 0),
   };
+}
+
+export async function markAdminMessageHandled(messageId: number): Promise<void> {
+  if (!apiEnabled()) return;
+  const response = await fetch(`/api/admin/messages/${messageId}/handled`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error(`客户询问更新失败（${response.status}）`);
 }
 
 export async function postAdminAction(path: string, data: Record<string, string | number | boolean | Array<string | number>> = {}) {

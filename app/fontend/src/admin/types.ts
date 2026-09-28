@@ -189,6 +189,7 @@ export interface AdminMessage {
   userName: string;
   userEmail: string;
   createdAt: string;
+  handledAt: string;
 }
 
 export interface SyncStatus {

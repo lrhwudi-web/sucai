@@ -122,7 +122,7 @@ export function ProductDrawer({
       const created = await addProductMessage(product.sku, message);
       setMessages((current) => [created, ...current]);
       setDraft("");
-      onNotify("Your message was sent to the admin team.");
+      onNotify("Your message was saved for your account team.");
     } catch (error) {
       onNotify(error instanceof Error ? error.message : "Your message could not be sent.");
     } finally {
@@ -338,7 +338,7 @@ export function ProductDrawer({
         {!catalogPreview && <section className="product-comments" aria-label="Comments and messages">
           <div className="product-comments-heading">
             <span><ChatCircleText size={18} weight="fill" /> Comments & messages</span>
-            <small>Private to you and the admin team</small>
+            <small>Private to you and your account team</small>
           </div>
           <form onSubmit={submitMessage}>
             <textarea

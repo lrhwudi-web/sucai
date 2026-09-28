@@ -32,6 +32,7 @@ const items = [
 const customerItems = [
   { id: "permissions" as const, label: "客户账号与权限", icon: ShieldCheck, count: "customers" },
   { id: "orders" as const, label: "客户订单", icon: ClipboardText, count: "订单" },
+  { id: "messages" as const, label: "客户询问", icon: ChatCenteredText, count: "messages" },
 ];
 
 export function AdminNav({ active, pendingCount, messageCount, customerCount, customerOnly = false, onChange }: AdminNavProps) {

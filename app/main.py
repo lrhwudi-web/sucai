@@ -2046,7 +2046,9 @@ def api_pending_customer_order_count(user=Depends(require_api_admin)):
             int(user["id"]),
             str(user["role"]),
         )
-    return {"pending_count": pending_count}
+        owner_id = None if user["role"] == "super_admin" else int(user["id"])
+        pending_inquiry_count = db.pending_product_message_count(conn, owner_id)
+    return {"pending_count": pending_count, "pending_inquiry_count": pending_inquiry_count}
 
 
 @app.get("/api/orders/{order_id}")
@@ -3221,10 +3223,22 @@ def api_admin_messages(
     q: str = "",
     limit: int = 200,
     offset: int = 0,
-    user=Depends(require_api_super_admin),
+    open_only: bool = False,
+    user=Depends(require_api_admin),
 ):
-    with db.connect() as conn:
-        return db.admin_product_messages(conn, q=q, limit=limit, offset=offset)
+    with closing(db.connect()) as conn:
+        owner_id = None if user["role"] == "super_admin" else int(user["id"])
+        return db.admin_product_messages(conn, q=q, limit=limit, offset=offset, owner_user_id=owner_id, open_only=open_only)
+
+
+@app.post("/api/admin/messages/{message_id}/handled")
+def api_mark_admin_message_handled(message_id: int, user=Depends(require_api_admin)):
+    with closing(db.connect()) as conn:
+        owner_id = None if user["role"] == "super_admin" else int(user["id"])
+        row = db.mark_product_message_handled(conn, message_id, int(user["id"]), owner_id)
+    if not row:
+        raise HTTPException(404, "Customer inquiry not found")
+    return {"message": dict(row)}
 
 
 @app.get("/api/admin/products")

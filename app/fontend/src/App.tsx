@@ -135,6 +135,7 @@ export function App() {
   const [driveJob, setDriveJob] = useState<DriveJob | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [pendingNotificationCount, setPendingNotificationCount] = useState(0);
+  const [pendingInquiryCount, setPendingInquiryCount] = useState(0);
   const [batchNotificationState, setBatchNotificationState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [filterPanelWidth, setFilterPanelWidth] = useState(loadFilterPanelWidth);
   const [resizingFilters, setResizingFilters] = useState(false);
@@ -234,14 +235,18 @@ export function App() {
   useEffect(() => {
     if (!currentUser?.isAdmin) {
       setPendingNotificationCount(0);
+      setPendingInquiryCount(0);
       return;
     }
 
     let cancelled = false;
     const refreshNotifications = () => {
       loadPendingCustomerOrderCount()
-        .then((count) => {
-          if (!cancelled) setPendingNotificationCount(count);
+        .then((counts) => {
+          if (!cancelled) {
+            setPendingNotificationCount(counts.orders);
+            setPendingInquiryCount(counts.inquiries);
+          }
         })
         .catch(() => undefined);
     };
@@ -253,12 +258,14 @@ export function App() {
     const interval = window.setInterval(refreshNotifications, 30_000);
     window.addEventListener("focus", refreshNotifications);
     window.addEventListener("kairay:pending-orders-changed", refreshNotifications);
+    window.addEventListener("kairay:pending-inquiries-changed", refreshNotifications);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
       window.removeEventListener("focus", refreshNotifications);
       window.removeEventListener("kairay:pending-orders-changed", refreshNotifications);
+      window.removeEventListener("kairay:pending-inquiries-changed", refreshNotifications);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [currentUser?.id, currentUser?.isAdmin]);
@@ -767,6 +774,7 @@ export function App() {
             onToggleFilters={() => setFiltersOpen(true)}
             onNotify={setToast}
             pendingNotificationCount={pendingNotificationCount}
+            pendingInquiryCount={pendingInquiryCount}
             onLogout={handleLogout}
             loggingOut={loggingOut}
             user={currentUser}
@@ -1012,7 +1020,7 @@ export function App() {
             navigate("quotation");
           }} />
       ) : activeView === "admin" ? (
-        <AdminPanel user={currentUser} search={search} onNotify={setToast} customerOnly />
+        <AdminPanel user={currentUser} search={search} onNotify={setToast} pendingInquiryCount={pendingInquiryCount} customerOnly />
       ) : (
         <SuperAdminPanel user={currentUser} onNotify={setToast} />
       )}

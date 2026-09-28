@@ -119,7 +119,6 @@ class SuperAdminCacheAndMissingSkuTest(unittest.TestCase):
             "/api/admin/overview",
             "/api/admin/notifications",
             "/api/admin/import-jobs",
-            "/api/admin/messages",
             "/api/admin/products",
             "/api/admin/categories",
             "/api/admin/themes",
@@ -132,6 +131,8 @@ class SuperAdminCacheAndMissingSkuTest(unittest.TestCase):
             "/api/admin/users",
             "/api/admin/users/{user_id}",
             "/api/admin/users/{user_id}/reset-password",
+            "/api/admin/messages",
+            "/api/admin/messages/{message_id}/handled",
         ):
             self.assertIn("require_api_admin", dependency_by_path[path], path)
 
