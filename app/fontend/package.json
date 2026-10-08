@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --config vite.config.mjs --configLoader runner",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build --config vite.config.mjs --configLoader runner",
-    "preview": "vite preview --config vite.config.mjs --configLoader runner"
+    "preview": "vite preview --config vite.config.mjs --configLoader runner",
+    "test:loading": "node --test tests/resourceLoading.test.mjs",
+    "check:performance": "node scripts/check-performance.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "1.1.1",

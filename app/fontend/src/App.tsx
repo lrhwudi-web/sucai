@@ -1,5 +1,7 @@
 import {
   Fragment,
+  lazy,
+  Suspense,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -20,9 +22,7 @@ import {
   SpinnerGap,
   X,
 } from "@phosphor-icons/react";
-import { AdminPanel } from "./admin/AdminPanel";
-import { SuperAdminPanel } from "./admin/SuperAdminPanel";
-import { OrdersPanel } from "./orders/OrdersPanel";
+import { PageBoundary, PageLoading } from "./components/PageBoundary";
 import { loadPendingCustomerOrderCount } from "./orders/orderService";
 import { FilterSidebar } from "./components/FilterSidebar";
 import { Header } from "./components/Header";
@@ -53,11 +53,13 @@ import {
   type ViewMode,
 } from "./types";
 import { parseCatalogueSearch } from "./utils/catalogueSearch";
-import { CatalogSheet } from "./quotation/CatalogSheet";
 import { useQuotation } from "./quotation/useQuotation";
 import { arrangeProducts, catalogDraftFingerprint, useCatalogOrder } from "./quotation/catalogOrder";
 import { emptyLine, isQuotable, MAX_QUOTE_PRODUCTS, setQuoteSelection, type QuoteLine } from "./quotation/quotation";
-import "./quotation/quotation.css";
+const AdminPanel = lazy(() => import("./admin/AdminPanel").then((module) => ({ default: module.AdminPanel })));
+const SuperAdminPanel = lazy(() => import("./admin/SuperAdminPanel").then((module) => ({ default: module.SuperAdminPanel })));
+const OrdersPanel = lazy(() => import("./orders/OrdersPanel").then((module) => ({ default: module.OrdersPanel })));
+const CatalogSheet = lazy(() => import("./quotation/CatalogSheet").then((module) => ({ default: module.CatalogSheet })));
 
 const emptyFilters: ProductFilters = {
   brand: [],
@@ -79,6 +81,7 @@ interface DriveJob {
 type AppView = "landing" | "catalogue" | "quotation" | "orders" | "admin" | "super-admin";
 
 const LIST_PAGE_SIZE = 20;
+const GRID_PAGE_SIZE = 40;
 const FILTER_PANEL_DEFAULT_WIDTH = 436;
 const FILTER_PANEL_MIN_WIDTH = 300;
 const FILTER_PANEL_MAX_WIDTH = 600;
@@ -108,7 +111,7 @@ function viewFromHash(): AppView {
   return "landing";
 }
 
-export function App() {
+export function App({ initialUser }: { initialUser?: AuthUser | null }) {
   const [activeView, setActiveView] = useState<AppView>(viewFromHash);
   const [products, setProducts] = useState<MaterialProduct[]>([]);
   const [themeOptions, setThemeOptions] = useState<ThemeOption[]>(DEFAULT_THEME_OPTIONS);
@@ -116,8 +119,8 @@ export function App() {
   const [loadError, setLoadError] = useState("");
   const [catalogueReady, setCatalogueReady] = useState(false);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [sessionLoading, setSessionLoading] = useState(apiEnabled());
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(initialUser ?? null);
+  const [sessionLoading, setSessionLoading] = useState(initialUser === undefined && apiEnabled());
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<ProductFilters>(emptyFilters);
   const [favoriteOnly, setFavoriteOnly] = useState(false);
@@ -126,6 +129,10 @@ export function App() {
     try { return localStorage.getItem("kairay.assetLibrary.layout") === "list" ? "list" : "grid"; } catch { return "grid"; }
   });
   const [listPage, setListPage] = useState(1);
+  const [gridVisibleCount, setGridVisibleCount] = useState(GRID_PAGE_SIZE);
+  const gridLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const loadedLibraryRef = useRef<{ key: string; loadedAt: number } | null>(null);
+  const needsLibrary = activeView === "catalogue" || activeView === "quotation";
   const [selectedSku, setSelectedSku] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -174,7 +181,7 @@ export function App() {
       return;
     }
     let mounted = true;
-    getSession()
+    (initialUser === undefined ? getSession() : Promise.resolve(initialUser))
       .then((user) => {
         if (!mounted) return;
         setCurrentUser(user);
@@ -243,8 +250,17 @@ export function App() {
   }, [currentUser?.id, currentUser?.isAdmin]);
 
   useEffect(() => {
-    if (!currentUser || (activeView !== "catalogue" && activeView !== "quotation")) return;
+    if (!currentUser) {
+      loadedLibraryRef.current = null;
+      setProducts([]);
+      setCatalogueReady(false);
+      return;
+    }
+    if (!needsLibrary) return;
+    const requestKey = `${currentUser.id}:${currentUser.role}:${libraryRefresh}`;
+    if (loadedLibraryRef.current?.key === requestKey && Date.now() - loadedLibraryRef.current.loadedAt < 60_000) return;
     let mounted = true;
+    const controller = new AbortController();
     setLoading(true);
     setCatalogueReady(false);
     setLoadError("");
@@ -253,14 +269,15 @@ export function App() {
         if (!mounted) return;
         setProducts(partialProducts);
         setLoading(false);
-      }),
-      loadThemeOptions(),
+      }, controller.signal),
+      loadThemeOptions(controller.signal),
     ])
       .then(([result, loadedThemeOptions]) => {
         if (!mounted) return;
         setProducts(result.products);
         setThemeOptions(loadedThemeOptions);
         setCatalogueReady(true);
+        loadedLibraryRef.current = { key: requestKey, loadedAt: Date.now() };
       })
       .catch((error) => {
         if (!mounted) return;
@@ -276,8 +293,8 @@ export function App() {
       .finally(() => {
         if (mounted) setLoading(false);
       });
-    return () => { mounted = false; };
-  }, [activeView, currentUser, libraryRefresh]);
+    return () => { mounted = false; controller.abort(); };
+  }, [needsLibrary, currentUser, libraryRefresh]);
 
   useEffect(() => {
     const syncViewFromHash = () => {
@@ -445,7 +462,20 @@ export function App() {
   const pageStart = (currentListPage - 1) * LIST_PAGE_SIZE;
   const displayedProducts = view === "list"
     ? visibleProducts.slice(pageStart, pageStart + LIST_PAGE_SIZE)
-    : visibleProducts;
+    : visibleProducts.slice(0, gridVisibleCount);
+  const hasMoreGridProducts = gridVisibleCount < visibleProducts.length;
+
+  useEffect(() => {
+    const target = gridLoadMoreRef.current;
+    if (activeView !== "catalogue" || view !== "grid" || !hasMoreGridProducts || !target || !window.IntersectionObserver) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setGridVisibleCount((count) => count + GRID_PAGE_SIZE);
+      }
+    }, { rootMargin: "400px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [activeView, view, hasMoreGridProducts, gridVisibleCount, visibleProducts.length, loading]);
   const exactSkuIndex = exactSkuProduct
     ? displayedProducts.findIndex((product) => product.sku === exactSkuProduct.sku)
     : -1;
@@ -475,6 +505,7 @@ export function App() {
 
   useEffect(() => {
     setListPage(1);
+    setGridVisibleCount(GRID_PAGE_SIZE);
   }, [search, filters, favoriteOnly, sort]);
 
   useEffect(() => {
@@ -749,6 +780,7 @@ export function App() {
             user={currentUser}
           />
 
+      <PageBoundary key={activeView}><Suspense fallback={<PageLoading />}>
       {activeView === "catalogue" ? <>
       <div
         className={`workspace ${selectedProduct ? "has-drawer" : ""}`}
@@ -876,6 +908,7 @@ export function App() {
                     product={product}
                     selected={product.sku === selectedSku}
                     view={view}
+                    priority={index < 6}
                     onSelect={() => setSelectedSku(product.sku)}
                     onOpenDrive={() => openProductInDrive(product)}
                     onToggleFavorite={() => toggleProductFavorite(product)}
@@ -889,6 +922,13 @@ export function App() {
               <strong>No matching assets found</strong>
               <p>Try a different keyword or reset your active filters.</p>
               <button className="button button-primary" onClick={() => { setSearch(""); resetFilters(); }}>Reset filters</button>
+            </div>
+          )}
+
+          {!loading && !loadError && view === "grid" && hasMoreGridProducts && (
+            <div className="catalogue-pagination" ref={gridLoadMoreRef}>
+              <span>Showing {displayedProducts.length} of {visibleProducts.length}</span>
+              <button className="button button-secondary" onClick={() => setGridVisibleCount((count) => count + GRID_PAGE_SIZE)}>Load more products</button>
             </div>
           )}
 
@@ -992,6 +1032,7 @@ export function App() {
       ) : (
         <SuperAdminPanel user={currentUser} onNotify={setToast} />
       )}
+      </Suspense></PageBoundary>
         </>
       )}
 

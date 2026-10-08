@@ -15,12 +15,13 @@ interface ProductCardProps {
   product: MaterialProduct;
   selected: boolean;
   view: ViewMode;
+  priority?: boolean;
   onSelect: () => void;
   onOpenDrive: () => void;
   onToggleFavorite: () => void;
 }
 
-export function ProductCard({ product, selected, view, onSelect, onOpenDrive, onToggleFavorite }: ProductCardProps) {
+export function ProductCard({ product, selected, view, priority = false, onSelect, onOpenDrive, onToggleFavorite }: ProductCardProps) {
   const imageCount = product.imageCount ?? product.assets.filter((asset) => asset.kind === "image").length;
   const videoCount = product.videoCount ?? product.assets.filter((asset) => asset.kind === "video").length;
   const documentCount = product.documentCount ?? product.assets.filter((asset) => asset.kind === "document").length;
@@ -48,8 +49,8 @@ export function ProductCard({ product, selected, view, onSelect, onOpenDrive, on
           <AssetImage
             src={thumbnailVariantUrl(cover.thumbnailUrl, "drawer")}
             alt={product.name}
-            loading="lazy"
-            fetchPriority={selected ? "high" : "low"}
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={selected || priority ? "high" : "low"}
           />
         )}
         {product.permission === "internal" ? (
