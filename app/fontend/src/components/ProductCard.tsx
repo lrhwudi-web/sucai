@@ -1,11 +1,11 @@
 import {
   ArrowRight,
-  ArrowSquareOut,
   Heart,
   ImageSquare,
   FilePdf,
   LockKey,
   VideoCamera,
+  DownloadSimple,
 } from "@phosphor-icons/react";
 import type { MaterialProduct, ViewMode } from "../types";
 import { thumbnailVariantUrl } from "../utils/thumbnails";
@@ -15,12 +15,15 @@ interface ProductCardProps {
   product: MaterialProduct;
   selected: boolean;
   view: ViewMode;
+  priority?: boolean;
   onSelect: () => void;
-  onOpenDrive: () => void;
   onToggleFavorite: () => void;
+  downloadSelected?: boolean;
+  onToggleDownload?: () => void;
+  onDownload?: () => void;
 }
 
-export function ProductCard({ product, selected, view, onSelect, onOpenDrive, onToggleFavorite }: ProductCardProps) {
+export function ProductCard({ product, selected, view, priority = false, onSelect, onToggleFavorite, downloadSelected, onToggleDownload, onDownload }: ProductCardProps) {
   const imageCount = product.imageCount ?? product.assets.filter((asset) => asset.kind === "image").length;
   const videoCount = product.videoCount ?? product.assets.filter((asset) => asset.kind === "video").length;
   const documentCount = product.documentCount ?? product.assets.filter((asset) => asset.kind === "document").length;
@@ -30,6 +33,7 @@ export function ProductCard({ product, selected, view, onSelect, onOpenDrive, on
 
   return (
     <article className={`product-card ${selected ? "is-selected" : ""} ${view === "list" ? "is-list" : ""}`}>
+      {onToggleDownload && <label className="download-select"><input type="checkbox" checked={Boolean(downloadSelected)} onChange={onToggleDownload} aria-label={`Select ${product.sku} for download`} /><span className="sr-only">Select for download</span></label>}
       <button
         className={`favorite-action ${product.isFavorite ? "is-active" : ""}`}
         onClick={onToggleFavorite}
@@ -48,8 +52,8 @@ export function ProductCard({ product, selected, view, onSelect, onOpenDrive, on
           <AssetImage
             src={thumbnailVariantUrl(cover.thumbnailUrl, "drawer")}
             alt={product.name}
-            loading="lazy"
-            fetchPriority={selected ? "high" : "low"}
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={selected || priority ? "high" : "low"}
           />
         )}
         {product.permission === "internal" ? (
@@ -74,9 +78,7 @@ export function ProductCard({ product, selected, view, onSelect, onOpenDrive, on
 
         <div className="product-card-actions">
           <button className="text-action" onClick={onSelect}>View details <ArrowRight size={16} weight="bold" /></button>
-          <button className="round-action" onClick={onOpenDrive} aria-label={`Open ${product.sku} in Drive`} title="Open in Drive">
-            <ArrowSquareOut size={18} weight="bold" />
-          </button>
+          {onDownload && <button className="round-action" onClick={onDownload} aria-label={`Download ${product.sku} assets`} title="Download assets to a folder"><DownloadSimple size={18} weight="bold" /></button>}
         </div>
       </div>
     </article>

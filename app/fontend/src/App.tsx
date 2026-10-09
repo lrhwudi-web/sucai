@@ -1,5 +1,7 @@
 import {
   Fragment,
+  lazy,
+  Suspense,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -13,16 +15,13 @@ import {
   ArrowsDownUp,
   CaretLeft,
   CaretRight,
-  CheckCircle,
+  DownloadSimple,
   GridFour,
   Heart,
   Rows,
   SpinnerGap,
-  X,
 } from "@phosphor-icons/react";
-import { AdminPanel } from "./admin/AdminPanel";
-import { SuperAdminPanel } from "./admin/SuperAdminPanel";
-import { OrdersPanel } from "./orders/OrdersPanel";
+import { PageBoundary, PageLoading } from "./components/PageBoundary";
 import { loadPendingCustomerOrderCount } from "./orders/orderService";
 import { FilterSidebar } from "./components/FilterSidebar";
 import { Header } from "./components/Header";
@@ -30,14 +29,14 @@ import { LandingPage } from "./components/LandingPage";
 import { ProductSearch } from "./components/ProductSearch";
 import { ProductCard } from "./components/ProductCard";
 import { ProductDrawer } from "./components/ProductDrawer";
+import { DownloadPanel } from "./components/DownloadPanel";
+import { useAssetDownloads } from "./services/useAssetDownloads";
 import { apiEnabled, getSession, logoutCustomer, type AuthUser } from "./services/auth";
 import {
   SessionExpiredError,
-  getProductDriveCopyStatus,
   loadProductDetail,
   loadProducts,
   loadThemeOptions,
-  prepareProductDriveCopy,
   reportMissingSkus,
   setProductCover,
   setProductFavorite,
@@ -53,11 +52,13 @@ import {
   type ViewMode,
 } from "./types";
 import { parseCatalogueSearch } from "./utils/catalogueSearch";
-import { CatalogSheet } from "./quotation/CatalogSheet";
 import { useQuotation } from "./quotation/useQuotation";
 import { arrangeProducts, catalogDraftFingerprint, useCatalogOrder } from "./quotation/catalogOrder";
 import { emptyLine, isQuotable, MAX_QUOTE_PRODUCTS, setQuoteSelection, type QuoteLine } from "./quotation/quotation";
-import "./quotation/quotation.css";
+const AdminPanel = lazy(() => import("./admin/AdminPanel").then((module) => ({ default: module.AdminPanel })));
+const SuperAdminPanel = lazy(() => import("./admin/SuperAdminPanel").then((module) => ({ default: module.SuperAdminPanel })));
+const OrdersPanel = lazy(() => import("./orders/OrdersPanel").then((module) => ({ default: module.OrdersPanel })));
+const CatalogSheet = lazy(() => import("./quotation/CatalogSheet").then((module) => ({ default: module.CatalogSheet })));
 
 const emptyFilters: ProductFilters = {
   brand: [],
@@ -69,16 +70,10 @@ const emptyFilters: ProductFilters = {
   permission: "",
 };
 
-interface DriveJob {
-  sku: string;
-  progress: number;
-  complete: boolean;
-  expiresAt?: string;
-}
-
 type AppView = "landing" | "catalogue" | "quotation" | "orders" | "admin" | "super-admin";
 
 const LIST_PAGE_SIZE = 20;
+const GRID_PAGE_SIZE = 40;
 const FILTER_PANEL_DEFAULT_WIDTH = 436;
 const FILTER_PANEL_MIN_WIDTH = 300;
 const FILTER_PANEL_MAX_WIDTH = 600;
@@ -108,7 +103,7 @@ function viewFromHash(): AppView {
   return "landing";
 }
 
-export function App() {
+export function App({ initialUser }: { initialUser?: AuthUser | null }) {
   const [activeView, setActiveView] = useState<AppView>(viewFromHash);
   const [products, setProducts] = useState<MaterialProduct[]>([]);
   const [themeOptions, setThemeOptions] = useState<ThemeOption[]>(DEFAULT_THEME_OPTIONS);
@@ -116,8 +111,8 @@ export function App() {
   const [loadError, setLoadError] = useState("");
   const [catalogueReady, setCatalogueReady] = useState(false);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [sessionLoading, setSessionLoading] = useState(apiEnabled());
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(initialUser ?? null);
+  const [sessionLoading, setSessionLoading] = useState(initialUser === undefined && apiEnabled());
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<ProductFilters>(emptyFilters);
   const [favoriteOnly, setFavoriteOnly] = useState(false);
@@ -126,10 +121,17 @@ export function App() {
     try { return localStorage.getItem("kairay.assetLibrary.layout") === "list" ? "list" : "grid"; } catch { return "grid"; }
   });
   const [listPage, setListPage] = useState(1);
+  const [gridVisibleCount, setGridVisibleCount] = useState(GRID_PAGE_SIZE);
+  const gridLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const loadedLibraryRef = useRef<{ key: string; loadedAt: number } | null>(null);
+  const needsLibrary = activeView === "catalogue" || activeView === "quotation";
   const [selectedSku, setSelectedSku] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [driveJob, setDriveJob] = useState<DriveJob | null>(null);
+  const [downloadSelection, setDownloadSelection] = useState<Set<string>>(() => new Set());
+  const downloads = useAssetDownloads(currentUser?.id, (message) => setToast(message));
+  const showBatchDownloads = Boolean(search.trim());
+  useEffect(() => setDownloadSelection(new Set()), [currentUser?.id, search]);
   const [loggingOut, setLoggingOut] = useState(false);
   const [pendingNotificationCount, setPendingNotificationCount] = useState(0);
   const [batchNotificationState, setBatchNotificationState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -174,7 +176,7 @@ export function App() {
       return;
     }
     let mounted = true;
-    getSession()
+    (initialUser === undefined ? getSession() : Promise.resolve(initialUser))
       .then((user) => {
         if (!mounted) return;
         setCurrentUser(user);
@@ -243,8 +245,17 @@ export function App() {
   }, [currentUser?.id, currentUser?.isAdmin]);
 
   useEffect(() => {
-    if (!currentUser || (activeView !== "catalogue" && activeView !== "quotation")) return;
+    if (!currentUser) {
+      loadedLibraryRef.current = null;
+      setProducts([]);
+      setCatalogueReady(false);
+      return;
+    }
+    if (!needsLibrary) return;
+    const requestKey = `${currentUser.id}:${currentUser.role}:${libraryRefresh}`;
+    if (loadedLibraryRef.current?.key === requestKey && Date.now() - loadedLibraryRef.current.loadedAt < 60_000) return;
     let mounted = true;
+    const controller = new AbortController();
     setLoading(true);
     setCatalogueReady(false);
     setLoadError("");
@@ -253,14 +264,15 @@ export function App() {
         if (!mounted) return;
         setProducts(partialProducts);
         setLoading(false);
-      }),
-      loadThemeOptions(),
+      }, controller.signal),
+      loadThemeOptions(controller.signal),
     ])
       .then(([result, loadedThemeOptions]) => {
         if (!mounted) return;
         setProducts(result.products);
         setThemeOptions(loadedThemeOptions);
         setCatalogueReady(true);
+        loadedLibraryRef.current = { key: requestKey, loadedAt: Date.now() };
       })
       .catch((error) => {
         if (!mounted) return;
@@ -276,8 +288,8 @@ export function App() {
       .finally(() => {
         if (mounted) setLoading(false);
       });
-    return () => { mounted = false; };
-  }, [activeView, currentUser, libraryRefresh]);
+    return () => { mounted = false; controller.abort(); };
+  }, [needsLibrary, currentUser, libraryRefresh]);
 
   useEffect(() => {
     const syncViewFromHash = () => {
@@ -445,7 +457,20 @@ export function App() {
   const pageStart = (currentListPage - 1) * LIST_PAGE_SIZE;
   const displayedProducts = view === "list"
     ? visibleProducts.slice(pageStart, pageStart + LIST_PAGE_SIZE)
-    : visibleProducts;
+    : visibleProducts.slice(0, gridVisibleCount);
+  const hasMoreGridProducts = gridVisibleCount < visibleProducts.length;
+
+  useEffect(() => {
+    const target = gridLoadMoreRef.current;
+    if (activeView !== "catalogue" || view !== "grid" || !hasMoreGridProducts || !target || !window.IntersectionObserver) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setGridVisibleCount((count) => count + GRID_PAGE_SIZE);
+      }
+    }, { rootMargin: "400px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [activeView, view, hasMoreGridProducts, gridVisibleCount, visibleProducts.length, loading]);
   const exactSkuIndex = exactSkuProduct
     ? displayedProducts.findIndex((product) => product.sku === exactSkuProduct.sku)
     : -1;
@@ -475,6 +500,7 @@ export function App() {
 
   useEffect(() => {
     setListPage(1);
+    setGridVisibleCount(GRID_PAGE_SIZE);
   }, [search, filters, favoriteOnly, sort]);
 
   useEffect(() => {
@@ -629,54 +655,6 @@ export function App() {
     setToast(`${product.sku} themes updated.`);
   };
 
-  const openProductInDrive = async (product: MaterialProduct) => {
-    setDriveJob({ sku: product.sku, progress: 5, complete: false });
-    setToast(`Preparing ${product.sku} in Google Drive…`);
-    if (!apiEnabled()) {
-      setDriveJob(null);
-      setToast("Open in Drive requires a connected account.");
-      return;
-    }
-    const driveWindow = window.open("about:blank", "_blank");
-    if (driveWindow) {
-      driveWindow.opener = null;
-      driveWindow.document.title = `Preparing ${product.sku} · Kairay Golf`;
-      driveWindow.document.body.textContent = `Preparing ${product.sku} in Google Drive…`;
-      driveWindow.document.body.style.cssText = "margin:0;min-height:100vh;display:grid;place-items:center;background:#fffaf5;color:#74171c;font:600 18px system-ui,sans-serif";
-    }
-    try {
-      let state = await prepareProductDriveCopy(product.sku);
-      if (!state.job_id) throw new Error("The Drive copy job did not return an ID.");
-      const jobId = state.job_id;
-      for (let attempt = 0; attempt < 120 && state.state !== "ready" && state.state !== "error"; attempt += 1) {
-        setDriveJob({ sku: product.sku, progress: state.progress || 0, complete: false });
-        await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        state = await getProductDriveCopyStatus(product.sku, jobId);
-      }
-      if (state.state === "error") throw new Error(state.error || "The Drive folder could not be created.");
-      if (state.state !== "ready") throw new Error("The Drive copy is taking too long. Please try again.");
-      if (!state.folder_url) throw new Error("Google Drive did not return the shared folder link.");
-      setDriveJob({ sku: product.sku, progress: 100, complete: true, expiresAt: state.expires_at });
-      setToast(`${product.sku} is ready in Google Drive for 15 days.`);
-      await new Promise((resolve) => window.setTimeout(resolve, 650));
-      if (driveWindow && !driveWindow.closed) {
-        driveWindow.location.replace(state.folder_url);
-      } else {
-        const opened = window.open(state.folder_url, "_blank", "noopener,noreferrer");
-        if (!opened) setToast(`${product.sku} is ready. Please allow pop-ups to open Google Drive.`);
-      }
-    } catch (error) {
-      if (driveWindow && !driveWindow.closed) driveWindow.close();
-      setDriveJob(null);
-      if (error instanceof SessionExpiredError) {
-        setCurrentUser(null);
-        window.location.hash = "";
-        setActiveView("landing");
-      }
-      setToast(error instanceof Error ? error.message : "The Drive folder could not be created.");
-    }
-  };
-
   const navigate = (nextView: AppView) => {
     if (nextView === "admin" && !currentUser?.isAdmin) {
       setToast("Administrator access is required.");
@@ -749,6 +727,7 @@ export function App() {
             user={currentUser}
           />
 
+      <PageBoundary key={activeView}><Suspense fallback={<PageLoading />}>
       {activeView === "catalogue" ? <>
       <div
         className={`workspace ${selectedProduct ? "has-drawer" : ""}`}
@@ -824,6 +803,14 @@ export function App() {
             </div>
           </section>
 
+          {showBatchDownloads && <section className="download-selection-bar" aria-label="Batch asset download">
+            <button className="button button-secondary" disabled={!catalogueReady || !visibleProducts.length} onClick={() => setDownloadSelection((current) => new Set([...current, ...visibleProducts.map((product) => product.sku)]))}>Select results ({visibleProducts.length})</button>
+            <span>{downloadSelection.size} selected</span>
+            <button className="button button-primary" disabled={!downloadSelection.size || downloads.choosingFolder} onClick={() => void downloads.add(products.filter((product) => downloadSelection.has(product.sku)))}><DownloadSimple size={18} />{downloads.choosingFolder ? "Choose a folder…" : "Download selected"}</button>
+            <button className="button button-secondary" disabled={!downloadSelection.size || downloads.choosingFolder} onClick={() => downloads.showLinks(products.filter((product) => downloadSelection.has(product.sku)))}>Individual file links</button>
+            {!!downloadSelection.size && <button className="text-action" onClick={() => setDownloadSelection(new Set())}>Clear</button>}
+          </section>}
+
           {parsedSearch.isBatchSkuSearch && catalogueReady && (
             <section className={`batch-search-summary ${batchMissingSkus.length ? "has-missing" : "is-complete"}`} aria-label="批量 SKU 搜索摘要">
               <div className="batch-search-counts">
@@ -876,8 +863,13 @@ export function App() {
                     product={product}
                     selected={product.sku === selectedSku}
                     view={view}
+                    priority={index < 6}
                     onSelect={() => setSelectedSku(product.sku)}
-                    onOpenDrive={() => openProductInDrive(product)}
+                    onDownload={() => void downloads.add([product])}
+                    downloadSelected={downloadSelection.has(product.sku)}
+                    onToggleDownload={showBatchDownloads ? () => setDownloadSelection((current) => {
+                      const next = new Set(current); if (next.has(product.sku)) next.delete(product.sku); else next.add(product.sku); return next;
+                    }) : undefined}
                     onToggleFavorite={() => toggleProductFavorite(product)}
                   />
                 </Fragment>
@@ -889,6 +881,13 @@ export function App() {
               <strong>No matching assets found</strong>
               <p>Try a different keyword or reset your active filters.</p>
               <button className="button button-primary" onClick={() => { setSearch(""); resetFilters(); }}>Reset filters</button>
+            </div>
+          )}
+
+          {!loading && !loadError && view === "grid" && hasMoreGridProducts && (
+            <div className="catalogue-pagination" ref={gridLoadMoreRef}>
+              <span>Showing {displayedProducts.length} of {visibleProducts.length}</span>
+              <button className="button button-secondary" onClick={() => setGridVisibleCount((count) => count + GRID_PAGE_SIZE)}>Load more products</button>
             </div>
           )}
 
@@ -937,7 +936,7 @@ export function App() {
           <ProductDrawer
             product={selectedProduct}
             onClose={() => setSelectedSku(null)}
-            onOpenDrive={() => openProductInDrive(selectedProduct)}
+            onDownload={() => void downloads.add([selectedProduct])}
             onToggleFavorite={() => toggleProductFavorite(selectedProduct)}
             isAdmin={currentUser.isAdmin}
             themeOptions={themeOptions}
@@ -948,23 +947,12 @@ export function App() {
         )}
       </div>
 
-      {driveJob && (
-        <div className={`drive-progress ${driveJob.complete ? "is-complete" : ""}`} role="status">
-          {driveJob.complete ? <CheckCircle size={21} weight="fill" /> : <SpinnerGap size={21} weight="bold" />}
-          <div>
-            <strong>{driveJob.complete ? "Your Drive folder is ready" : `Preparing ${driveJob.sku}`}</strong>
-            <span>{driveJob.complete ? "Available for 15 days" : `${driveJob.progress}% · Copying in Drive`}</span>
-          </div>
-          <div className="drive-meter"><span style={{ width: `${driveJob.progress}%` }} /></div>
-          <button onClick={() => setDriveJob(null)} aria-label="Close progress"><X size={16} weight="bold" /></button>
-        </div>
-      )}
       </> : activeView === "quotation" ? (
         <CatalogSheet key={`${currentUser.id}:${currentUser.email}`} products={orderedCatalogProducts} search={search} onSearchChange={setSearch}
           draft={quotation.draft} publishedCatalogDraft={catalogOrder.draft} loading={loading} loadError={loadError} storageFailed={quotation.storageFailed}
           onRetry={() => setLibraryRefresh((v) => v + 1)} onUpdate={quotation.update}
           onUndo={quotation.undo} onRedo={quotation.redo} canUndo={quotation.canUndo} canRedo={quotation.canRedo}
-          onToggle={toggleQuote} onEdit={editQuote} onNotify={setToast} onOpenDrive={openProductInDrive} onSetCover={updateProductCover}
+          onToggle={toggleQuote} onEdit={editQuote} onNotify={setToast} onDownload={(product) => void downloads.add([product])} onSetCover={updateProductCover}
           catalogOrderOwner={catalogOrder.ownerName} canManageCatalogOrder={catalogOrder.canManage}
           catalogOrderLoading={catalogOrder.loading} catalogOrderSaving={catalogOrder.saving} catalogOrderError={catalogOrder.error}
           onSaveCatalogOrder={catalogOrder.save} onSaveCatalogOrderOnly={catalogOrder.saveOrder} />
@@ -992,9 +980,11 @@ export function App() {
       ) : (
         <SuperAdminPanel user={currentUser} onNotify={setToast} />
       )}
+      </Suspense></PageBoundary>
         </>
       )}
 
+      {currentUser && <DownloadPanel downloads={downloads} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );

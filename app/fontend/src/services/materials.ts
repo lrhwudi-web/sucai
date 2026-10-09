@@ -186,6 +186,7 @@ function fromApiDetail(product: ApiProductDetail): MaterialProduct {
 
 export async function loadProducts(
   onProgress?: (products: MaterialProduct[]) => void,
+  signal?: AbortSignal,
 ): Promise<{ products: MaterialProduct[]; source: "api" | "demo" }> {
   if (!apiEnabled()) {
     return {
@@ -208,11 +209,13 @@ export async function loadProducts(
   let hasMore = true;
   let catalogSnapshot = "";
   while (hasMore) {
-    const query = new URLSearchParams({ limit: "250", offset: String(offset) });
+    signal?.throwIfAborted();
+    const query = new URLSearchParams({ limit: offset === 0 ? "40" : "250", offset: String(offset) });
     if (catalogSnapshot) query.set("catalog_snapshot", catalogSnapshot);
     const response = await fetch(`/api/products?${query}`, {
       headers: { Accept: "application/json" },
       credentials: "include",
+      signal,
     });
     if (!response.ok) throw await apiError(response, "The product library could not be loaded.");
     const payload = await response.json() as ProductPage;
@@ -223,11 +226,13 @@ export async function loadProducts(
     if (!hasMore) break;
     if (payload.next_offset <= offset) throw new Error("The product library returned an invalid page cursor.");
     offset = payload.next_offset;
+    // Allow first-page rendering and input handling before fetching the next batch.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
   return { products, source: "api" };
 }
 
-export async function loadProductDetail(sku: string): Promise<MaterialProduct> {
+export async function loadProductDetail(sku: string, signal?: AbortSignal): Promise<MaterialProduct> {
   if (!apiEnabled()) {
     const product = mockProducts.find((item) => item.sku === sku);
     if (!product) throw new Error("Product not found.");
@@ -238,6 +243,7 @@ export async function loadProductDetail(sku: string): Promise<MaterialProduct> {
     };
   }
   const response = await fetch(`/api/products/${encodeURIComponent(sku)}`, {
+    signal,
     headers: { Accept: "application/json" },
     credentials: "include",
   });
@@ -246,11 +252,12 @@ export async function loadProductDetail(sku: string): Promise<MaterialProduct> {
   return fromApiDetail(payload.product);
 }
 
-export async function loadThemeOptions(): Promise<ThemeOption[]> {
+export async function loadThemeOptions(signal?: AbortSignal): Promise<ThemeOption[]> {
   if (!apiEnabled()) return DEFAULT_THEME_OPTIONS;
   const response = await fetch("/api/themes", {
     headers: { Accept: "application/json" },
     credentials: "include",
+    signal,
   });
   if (!response.ok) throw await apiError(response, "Theme options could not be loaded.");
   const payload = await response.json() as { themes?: ThemeOption[] };
@@ -275,6 +282,7 @@ export async function setProductThemes(sku: string, themes: string[]): Promise<v
 export async function prepareProductDriveCopy(sku: string): Promise<DriveCopyState> {
   if (!apiEnabled()) return { state: "error", progress: 0, error: "Drive export requires a connected account." };
   const response = await fetch(`/sku/${encodeURIComponent(sku)}/drive/prepare`, {
+    signal: AbortSignal.timeout(30000),
     method: "POST",
     headers: { Accept: "application/json" },
     credentials: "include",
@@ -286,6 +294,7 @@ export async function prepareProductDriveCopy(sku: string): Promise<DriveCopySta
 export async function getProductDriveCopyStatus(sku: string, jobId: string): Promise<DriveCopyState> {
   const query = new URLSearchParams({ job_id: jobId });
   const response = await fetch(`/sku/${encodeURIComponent(sku)}/drive/status?${query}`, {
+    signal: AbortSignal.timeout(30000),
     headers: { Accept: "application/json" },
     credentials: "include",
   });

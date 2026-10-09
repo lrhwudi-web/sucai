@@ -5,7 +5,6 @@ import {
   ChatCircleText,
   Check,
   FilePdf,
-  FolderOpen,
   Heart,
   ImageSquare,
   Info,
@@ -15,6 +14,7 @@ import {
   Star,
   Tag,
   X,
+  DownloadSimple,
 } from "@phosphor-icons/react";
 import { addProductMessage, loadMyProductMessages, recordOriginalOpen, type ProductMessage } from "../services/materials";
 import type { MaterialAsset, MaterialProduct, ThemeOption } from "../types";
@@ -24,7 +24,7 @@ import { AssetImage } from "./AssetImage";
 interface ProductDrawerProps {
   product: MaterialProduct;
   onClose: () => void;
-  onOpenDrive: () => void;
+  onDownload?: () => void;
   onToggleFavorite: () => void;
   isAdmin: boolean;
   themeOptions: ThemeOption[];
@@ -44,7 +44,7 @@ function formatMessageTime(value: string): string {
 export function ProductDrawer({
   product,
   onClose,
-  onOpenDrive,
+  onDownload,
   onToggleFavorite,
   isAdmin,
   themeOptions,
@@ -376,9 +376,7 @@ export function ProductDrawer({
         <button className="button button-secondary" onClick={openOriginal}>
           <ArrowSquareOut size={18} weight="bold" /> Open original
         </button>
-        <button className="button button-primary" onClick={onOpenDrive}>
-          <FolderOpen size={18} weight="fill" /> Open in Drive
-        </button>
+        {onDownload && <button className="button button-primary" onClick={onDownload}><DownloadSimple size={18} weight="bold" />Download all assets</button>}
       </div>
     </aside>
     {originalModal}
