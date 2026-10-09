@@ -45,8 +45,16 @@ export function useAssetDownloads(account: number | undefined, notify: (message:
       root.current = selected;
       manager.add(newProducts, root.current);
     } catch (error) {
-      if (!(error instanceof Error && error.name === "AbortError")) notify(error instanceof Error ? error.message : "The destination folder could not be selected.");
+      if (error instanceof Error && ["NotAllowedError", "SecurityError", "NotSupportedError"].includes(error.name)) {
+        if (requestedAccount !== accountRef.current) return;
+        manager.add(newProducts, null);
+        notify("Folder saving is unavailable in this browser. Individual download links are ready below.");
+      } else if (!(error instanceof Error && error.name === "AbortError")) notify(error instanceof Error ? error.message : "The destination folder could not be selected. Use Individual file links instead.");
     } finally { pickerBusy.current = false; setChoosingFolder(false); }
+  };
+  const showLinks = (products: MaterialProduct[]) => {
+    if (!account || pickerBusy.current) return;
+    manager.add(products, null);
   };
   const retry = (sku: string) => manager.retry(sku);
   const chooseAgain = async (sku: string) => {
@@ -58,5 +66,5 @@ export function useAssetDownloads(account: number | undefined, notify: (message:
       manager.retry(sku, selected);
     } catch (error) { if (!(error instanceof Error && error.name === "AbortError")) notify("Choose a writable folder, then retry."); }
   };
-  return { jobs, add, retry, chooseAgain, choosingFolder, hasActive, folder: root.current?.name, cancel: (sku: string) => manager.cancel(sku), remove: (sku: string) => manager.remove(sku) };
+  return { jobs, add, showLinks, retry, chooseAgain, choosingFolder, hasActive, folder: root.current?.name, cancel: (sku: string) => manager.cancel(sku), remove: (sku: string) => manager.remove(sku) };
 }

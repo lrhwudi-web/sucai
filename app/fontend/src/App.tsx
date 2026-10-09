@@ -815,6 +815,7 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
             <button className="button button-secondary" disabled={!catalogueReady || !visibleProducts.length} onClick={() => setDownloadSelection((current) => new Set([...current, ...visibleProducts.map((product) => product.sku)]))}>Select results ({visibleProducts.length})</button>
             <span>{downloadSelection.size} selected</span>
             <button className="button button-primary" disabled={!downloadSelection.size || downloads.choosingFolder} onClick={() => void downloads.add(products.filter((product) => downloadSelection.has(product.sku)))}><DownloadSimple size={18} />{downloads.choosingFolder ? "Choose a folder…" : "Download selected"}</button>
+            <button className="button button-secondary" disabled={!downloadSelection.size || downloads.choosingFolder} onClick={() => downloads.showLinks(products.filter((product) => downloadSelection.has(product.sku)))}>Individual file links</button>
             {!!downloadSelection.size && <button className="text-action" onClick={() => setDownloadSelection(new Set())}>Clear</button>}
           </section>
 

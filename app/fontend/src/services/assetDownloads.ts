@@ -100,7 +100,7 @@ export class AssetDownloadQueue {
   }
   retry(sku: string, root?: DownloadDirectory | null) {
     const task = this.tasks.get(sku);
-    if (!task || !["error", "cancelled"].includes(task.job.state)) return;
+    if (!task || !["error", "cancelled", "manual"].includes(task.job.state)) return;
     if (root !== undefined && root !== task.root) {
       // A new destination must include all files, including those saved in the old one.
       task.root = root; task.folder = undefined; task.saved.clear(); task.paths.clear();

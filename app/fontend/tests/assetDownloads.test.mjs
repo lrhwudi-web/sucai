@@ -139,6 +139,19 @@ test("unsupported browsers expose authenticated individual links without claimin
   assert.ok(queue.snapshot().every((job) => job.state === "manual" && job.completed === 0 && job.assets.length === 1));
 });
 
+test("individual file links can switch to folder saving after a destination is selected", async () => {
+  const root = memoryDirectory();
+  const calls = [];
+  const queue = new AssetDownloadQueue(async (sku) => product(sku), async (url) => { calls.push(url); return fileResponse(); });
+  queue.add([product("1"), product("2")], null); await settle(queue);
+  assert.equal(calls.length, 0);
+  queue.retry("1", root); await settle(queue);
+  assert.equal(queue.snapshot()[0].state, "ready");
+  assert.equal(queue.snapshot()[0].completed, 1);
+  assert.equal(queue.snapshot()[1].state, "manual");
+  assert.deepEqual(calls, ["/download/1"]);
+});
+
 test("Windows reserved names, traversal and invalid characters are neutralized", () => {
   assert.equal(safeDownloadName("CON.jpg"), "_CON.jpg"); assert.equal(safeDownloadName("../../bad:file?.jpg"), ".._.._bad_file_.jpg");
   assert.equal(safeDownloadName(".."), "asset"); assert.equal(safeDownloadName("hello.jpg. "), "hello.jpg");

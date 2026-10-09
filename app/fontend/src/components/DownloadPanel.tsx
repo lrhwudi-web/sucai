@@ -17,7 +17,7 @@ export function DownloadPanel({ downloads, drive }: { downloads: ReturnType<type
       <CaretDown size={18} style={{ transform: collapsed ? "rotate(180deg)" : undefined }} />
     </button>
     {!collapsed && <div className="download-panel-body">
-      {!!downloads.jobs.length && <p className="download-destination">{downloads.folder ? `Saving to ${downloads.folder} · folders by product` : "Folder saving is unavailable here. Use the file links below, or open this site in desktop Edge / Chrome for batch saving."}</p>}
+      {!!downloads.jobs.length && <p className="download-destination">{downloads.folder ? `Saving to ${downloads.folder} · folders by product` : "Use the individual links below, or Download selected in desktop Edge / Chrome to save all files to a folder."}</p>}
       {downloads.jobs.map((job) => <article className="download-task" key={`file-${job.sku}`}>
         <div className="download-task-title"><strong>{job.sku}</strong><span>{job.state === "ready" ? "Saved" : job.state === "queued" ? "Queued" : job.state === "loading" ? "Loading files…" : job.state === "manual" ? `${job.total} file links` : job.state === "cancelled" ? "Stopped" : job.state === "error" ? "Needs retry" : `${job.completed} / ${job.total} saved`}</span>
           {!downloadIsActive(job) && <button aria-label={`Remove ${job.sku} download`} onClick={() => downloads.remove(job.sku)}><X size={15} /></button>}</div>
@@ -26,6 +26,7 @@ export function DownloadPanel({ downloads, drive }: { downloads: ReturnType<type
         {job.state === "ready" && <small>{job.completed} files saved · {job.folderName}</small>}
         {job.error && <p className="download-error">{job.error}</p>}
         <div className="download-task-actions">
+          {job.state === "manual" && <button onClick={() => void downloads.chooseAgain(job.sku)}>Save to folder</button>}
           {downloadIsActive(job) && <button onClick={() => downloads.cancel(job.sku)}>Stop</button>}
           {["error", "cancelled"].includes(job.state) && <><button onClick={() => downloads.retry(job.sku)}>Retry remaining files</button><button onClick={() => void downloads.chooseAgain(job.sku)}>Choose another folder</button></>}
         </div>
