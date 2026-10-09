@@ -31,7 +31,6 @@ import { ProductCard } from "./components/ProductCard";
 import { ProductDrawer } from "./components/ProductDrawer";
 import { DownloadPanel } from "./components/DownloadPanel";
 import { useAssetDownloads } from "./services/useAssetDownloads";
-import { useDriveTransfers } from "./services/useDriveTransfers";
 import { apiEnabled, getSession, logoutCustomer, type AuthUser } from "./services/auth";
 import {
   SessionExpiredError,
@@ -131,10 +130,8 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
   const [toast, setToast] = useState<string | null>(null);
   const [downloadSelection, setDownloadSelection] = useState<Set<string>>(() => new Set());
   const downloads = useAssetDownloads(currentUser?.id, (message) => setToast(message));
-  const driveTransfers = useDriveTransfers(currentUser?.id, () => {
-    setCurrentUser(null); window.location.hash = ""; setActiveView("landing");
-  });
-  useEffect(() => setDownloadSelection(new Set()), [currentUser?.id]);
+  const showBatchDownloads = Boolean(search.trim());
+  useEffect(() => setDownloadSelection(new Set()), [currentUser?.id, search]);
   const [loggingOut, setLoggingOut] = useState(false);
   const [pendingNotificationCount, setPendingNotificationCount] = useState(0);
   const [batchNotificationState, setBatchNotificationState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -658,11 +655,6 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
     setToast(`${product.sku} themes updated.`);
   };
 
-  const openProductInDrive = (product: MaterialProduct) => {
-    if (!apiEnabled()) { setToast("Open in Drive requires a connected account."); return; }
-    driveTransfers.add(product.sku);
-  };
-
   const navigate = (nextView: AppView) => {
     if (nextView === "admin" && !currentUser?.isAdmin) {
       setToast("Administrator access is required.");
@@ -811,13 +803,13 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
             </div>
           </section>
 
-          <section className="download-selection-bar" aria-label="Batch asset download">
+          {showBatchDownloads && <section className="download-selection-bar" aria-label="Batch asset download">
             <button className="button button-secondary" disabled={!catalogueReady || !visibleProducts.length} onClick={() => setDownloadSelection((current) => new Set([...current, ...visibleProducts.map((product) => product.sku)]))}>Select results ({visibleProducts.length})</button>
             <span>{downloadSelection.size} selected</span>
             <button className="button button-primary" disabled={!downloadSelection.size || downloads.choosingFolder} onClick={() => void downloads.add(products.filter((product) => downloadSelection.has(product.sku)))}><DownloadSimple size={18} />{downloads.choosingFolder ? "Choose a folder…" : "Download selected"}</button>
             <button className="button button-secondary" disabled={!downloadSelection.size || downloads.choosingFolder} onClick={() => downloads.showLinks(products.filter((product) => downloadSelection.has(product.sku)))}>Individual file links</button>
             {!!downloadSelection.size && <button className="text-action" onClick={() => setDownloadSelection(new Set())}>Clear</button>}
-          </section>
+          </section>}
 
           {parsedSearch.isBatchSkuSearch && catalogueReady && (
             <section className={`batch-search-summary ${batchMissingSkus.length ? "has-missing" : "is-complete"}`} aria-label="批量 SKU 搜索摘要">
@@ -873,12 +865,11 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
                     view={view}
                     priority={index < 6}
                     onSelect={() => setSelectedSku(product.sku)}
-                    onOpenDrive={() => openProductInDrive(product)}
                     onDownload={() => void downloads.add([product])}
                     downloadSelected={downloadSelection.has(product.sku)}
-                    onToggleDownload={() => setDownloadSelection((current) => {
+                    onToggleDownload={showBatchDownloads ? () => setDownloadSelection((current) => {
                       const next = new Set(current); if (next.has(product.sku)) next.delete(product.sku); else next.add(product.sku); return next;
-                    })}
+                    }) : undefined}
                     onToggleFavorite={() => toggleProductFavorite(product)}
                   />
                 </Fragment>
@@ -945,7 +936,6 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
           <ProductDrawer
             product={selectedProduct}
             onClose={() => setSelectedSku(null)}
-            onOpenDrive={() => openProductInDrive(selectedProduct)}
             onDownload={() => void downloads.add([selectedProduct])}
             onToggleFavorite={() => toggleProductFavorite(selectedProduct)}
             isAdmin={currentUser.isAdmin}
@@ -962,7 +952,7 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
           draft={quotation.draft} publishedCatalogDraft={catalogOrder.draft} loading={loading} loadError={loadError} storageFailed={quotation.storageFailed}
           onRetry={() => setLibraryRefresh((v) => v + 1)} onUpdate={quotation.update}
           onUndo={quotation.undo} onRedo={quotation.redo} canUndo={quotation.canUndo} canRedo={quotation.canRedo}
-          onToggle={toggleQuote} onEdit={editQuote} onNotify={setToast} onOpenDrive={openProductInDrive} onSetCover={updateProductCover}
+          onToggle={toggleQuote} onEdit={editQuote} onNotify={setToast} onDownload={(product) => void downloads.add([product])} onSetCover={updateProductCover}
           catalogOrderOwner={catalogOrder.ownerName} canManageCatalogOrder={catalogOrder.canManage}
           catalogOrderLoading={catalogOrder.loading} catalogOrderSaving={catalogOrder.saving} catalogOrderError={catalogOrder.error}
           onSaveCatalogOrder={catalogOrder.save} onSaveCatalogOrderOnly={catalogOrder.saveOrder} />
@@ -994,7 +984,7 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
         </>
       )}
 
-      {currentUser && <DownloadPanel downloads={downloads} drive={driveTransfers} />}
+      {currentUser && <DownloadPanel downloads={downloads} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );

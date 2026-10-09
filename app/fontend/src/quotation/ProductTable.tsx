@@ -1,4 +1,4 @@
-import { ArrowSquareOut, Heart, FilePdf, ArrowUp, ArrowDown, X } from "@phosphor-icons/react";
+import { DownloadSimple, Heart, FilePdf, ArrowUp, ArrowDown, X } from "@phosphor-icons/react";
 import { useEffect, useRef } from "react";
 import type { MaterialProduct } from "../types";
 import { AssetImage } from "../components/AssetImage";
@@ -12,11 +12,11 @@ export interface ProductTableProps {
   onEdit: (sku: string, patch: Partial<QuoteLine>) => void;
   onSelect: (sku: string) => void;
   onFavorite?: (product: MaterialProduct) => void;
-  onOpenDrive?: (product: MaterialProduct) => void;
+  onDownload?: (product: MaterialProduct) => void;
   onMove?: (sku: string, direction: -1 | 1) => void;
   editor?: boolean;
 }
-export function ProductTable({ products, draft, onToggle, onEdit, onSelect, onFavorite, onOpenDrive, onMove, editor = false }: ProductTableProps) {
+export function ProductTable({ products, draft, onToggle, onEdit, onSelect, onFavorite, onDownload, onMove, editor = false }: ProductTableProps) {
   const ImageTag = editor ? "div" : "button";
   const SkuTag = editor ? "span" : "button";
   const checkbox = useRef<HTMLInputElement>(null);
@@ -52,7 +52,7 @@ export function ProductTable({ products, draft, onToggle, onEdit, onSelect, onFa
           {draft.showCategory && <td className="quote-meta-cell">{product.otherCategory || product.category || "—"}</td>}
           {draft.showPrice && <td className="quote-amount">{price !== null && qty !== null ? formatMoney(price * qty, draft.currency) : "—"}</td>}
           <td><input className="quote-note-input" aria-label={`Note for ${product.sku}`} placeholder="Add a note" value={line.note} disabled={!quotable} maxLength={160} onChange={(e) => onEdit(product.sku, { note: e.target.value })} /></td>
-          <td><div className="quote-row-actions">{editor ? <button aria-label={`Remove ${product.sku} from quotation`} onClick={() => onToggle([product.sku], false)}><X size={17} /></button> : <><button aria-label={`${product.isFavorite ? "Remove" : "Add"} ${product.sku} ${product.isFavorite ? "from" : "to"} favorites`} onClick={() => onFavorite?.(product)}><Heart size={18} weight={product.isFavorite ? "fill" : "regular"} /></button><button aria-label={`Open ${product.sku} in Drive`} onClick={() => onOpenDrive?.(product)}><ArrowSquareOut size={18} /></button></>}</div></td>
+          <td><div className="quote-row-actions">{editor ? <button aria-label={`Remove ${product.sku} from quotation`} onClick={() => onToggle([product.sku], false)}><X size={17} /></button> : <><button aria-label={`${product.isFavorite ? "Remove" : "Add"} ${product.sku} ${product.isFavorite ? "from" : "to"} favorites`} onClick={() => onFavorite?.(product)}><Heart size={18} weight={product.isFavorite ? "fill" : "regular"} /></button><button aria-label={`Download ${product.sku} assets`} onClick={() => onDownload?.(product)}><DownloadSimple size={18} /></button></>}</div></td>
         </tr>;
       })}</tbody>
     </table>

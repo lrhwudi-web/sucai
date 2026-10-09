@@ -9,13 +9,13 @@ interface Props {
   product: MaterialProduct;
   importedPhoto?: string;
   onClose: () => void;
-  onOpenDrive: () => void;
+  onDownload: () => void;
   canSetCover: boolean;
   onSetCover: (product: MaterialProduct, asset: MaterialAsset) => Promise<void>;
   onNotify: (message: string) => void;
 }
 
-export function ProductImageGallery({ product, importedPhoto = "", onClose, onOpenDrive, canSetCover, onSetCover, onNotify }: Props) {
+export function ProductImageGallery({ product, importedPhoto = "", onClose, onDownload, canSetCover, onSetCover, onNotify }: Props) {
   const [detail, setDetail] = useState(product);
   const images = useMemo(() => visibleGalleryImages(detail, importedPhoto), [detail, importedPhoto]);
   const fallbackImages = useMemo(() => visibleGalleryImages(product, importedPhoto), [importedPhoto, product]);
@@ -36,7 +36,7 @@ export function ProductImageGallery({ product, importedPhoto = "", onClose, onOp
       <ProductDrawer
         product={drawerProduct}
         onClose={onClose}
-        onOpenDrive={onOpenDrive}
+        onDownload={onDownload}
         onToggleFavorite={() => undefined}
         isAdmin={canSetCover}
         themeOptions={[]}

@@ -1,6 +1,5 @@
 import {
   ArrowRight,
-  ArrowSquareOut,
   Heart,
   ImageSquare,
   FilePdf,
@@ -18,14 +17,13 @@ interface ProductCardProps {
   view: ViewMode;
   priority?: boolean;
   onSelect: () => void;
-  onOpenDrive: () => void;
   onToggleFavorite: () => void;
   downloadSelected?: boolean;
   onToggleDownload?: () => void;
   onDownload?: () => void;
 }
 
-export function ProductCard({ product, selected, view, priority = false, onSelect, onOpenDrive, onToggleFavorite, downloadSelected, onToggleDownload, onDownload }: ProductCardProps) {
+export function ProductCard({ product, selected, view, priority = false, onSelect, onToggleFavorite, downloadSelected, onToggleDownload, onDownload }: ProductCardProps) {
   const imageCount = product.imageCount ?? product.assets.filter((asset) => asset.kind === "image").length;
   const videoCount = product.videoCount ?? product.assets.filter((asset) => asset.kind === "video").length;
   const documentCount = product.documentCount ?? product.assets.filter((asset) => asset.kind === "document").length;
@@ -81,9 +79,6 @@ export function ProductCard({ product, selected, view, priority = false, onSelec
         <div className="product-card-actions">
           <button className="text-action" onClick={onSelect}>View details <ArrowRight size={16} weight="bold" /></button>
           {onDownload && <button className="round-action" onClick={onDownload} aria-label={`Download ${product.sku} assets`} title="Download assets to a folder"><DownloadSimple size={18} weight="bold" /></button>}
-          <button className="round-action" onClick={onOpenDrive} aria-label={`Open ${product.sku} in Drive`} title="Open in Drive">
-            <ArrowSquareOut size={18} weight="bold" />
-          </button>
         </div>
       </div>
     </article>

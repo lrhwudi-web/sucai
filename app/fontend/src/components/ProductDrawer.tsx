@@ -5,7 +5,6 @@ import {
   ChatCircleText,
   Check,
   FilePdf,
-  FolderOpen,
   Heart,
   ImageSquare,
   Info,
@@ -25,7 +24,6 @@ import { AssetImage } from "./AssetImage";
 interface ProductDrawerProps {
   product: MaterialProduct;
   onClose: () => void;
-  onOpenDrive: () => void;
   onDownload?: () => void;
   onToggleFavorite: () => void;
   isAdmin: boolean;
@@ -46,7 +44,6 @@ function formatMessageTime(value: string): string {
 export function ProductDrawer({
   product,
   onClose,
-  onOpenDrive,
   onDownload,
   onToggleFavorite,
   isAdmin,
@@ -378,9 +375,6 @@ export function ProductDrawer({
       <div className="drawer-actions">
         <button className="button button-secondary" onClick={openOriginal}>
           <ArrowSquareOut size={18} weight="bold" /> Open original
-        </button>
-        <button className="button button-secondary" onClick={onOpenDrive}>
-          <FolderOpen size={18} weight="fill" /> Open in Drive
         </button>
         {onDownload && <button className="button button-primary" onClick={onDownload}><DownloadSimple size={18} weight="bold" />Download all assets</button>}
       </div>
