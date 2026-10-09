@@ -15,12 +15,11 @@ import {
   ArrowsDownUp,
   CaretLeft,
   CaretRight,
-  CheckCircle,
+  DownloadSimple,
   GridFour,
   Heart,
   Rows,
   SpinnerGap,
-  X,
 } from "@phosphor-icons/react";
 import { PageBoundary, PageLoading } from "./components/PageBoundary";
 import { loadPendingCustomerOrderCount } from "./orders/orderService";
@@ -30,14 +29,15 @@ import { LandingPage } from "./components/LandingPage";
 import { ProductSearch } from "./components/ProductSearch";
 import { ProductCard } from "./components/ProductCard";
 import { ProductDrawer } from "./components/ProductDrawer";
+import { DownloadPanel } from "./components/DownloadPanel";
+import { useAssetDownloads } from "./services/useAssetDownloads";
+import { useDriveTransfers } from "./services/useDriveTransfers";
 import { apiEnabled, getSession, logoutCustomer, type AuthUser } from "./services/auth";
 import {
   SessionExpiredError,
-  getProductDriveCopyStatus,
   loadProductDetail,
   loadProducts,
   loadThemeOptions,
-  prepareProductDriveCopy,
   reportMissingSkus,
   setProductCover,
   setProductFavorite,
@@ -70,13 +70,6 @@ const emptyFilters: ProductFilters = {
   assetKind: "",
   permission: "",
 };
-
-interface DriveJob {
-  sku: string;
-  progress: number;
-  complete: boolean;
-  expiresAt?: string;
-}
 
 type AppView = "landing" | "catalogue" | "quotation" | "orders" | "admin" | "super-admin";
 
@@ -136,7 +129,12 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
   const [selectedSku, setSelectedSku] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [driveJob, setDriveJob] = useState<DriveJob | null>(null);
+  const [downloadSelection, setDownloadSelection] = useState<Set<string>>(() => new Set());
+  const downloads = useAssetDownloads(currentUser?.id, (message) => setToast(message));
+  const driveTransfers = useDriveTransfers(currentUser?.id, () => {
+    setCurrentUser(null); window.location.hash = ""; setActiveView("landing");
+  });
+  useEffect(() => setDownloadSelection(new Set()), [currentUser?.id]);
   const [loggingOut, setLoggingOut] = useState(false);
   const [pendingNotificationCount, setPendingNotificationCount] = useState(0);
   const [batchNotificationState, setBatchNotificationState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -660,52 +658,9 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
     setToast(`${product.sku} themes updated.`);
   };
 
-  const openProductInDrive = async (product: MaterialProduct) => {
-    setDriveJob({ sku: product.sku, progress: 5, complete: false });
-    setToast(`Preparing ${product.sku} in Google Drive…`);
-    if (!apiEnabled()) {
-      setDriveJob(null);
-      setToast("Open in Drive requires a connected account.");
-      return;
-    }
-    const driveWindow = window.open("about:blank", "_blank");
-    if (driveWindow) {
-      driveWindow.opener = null;
-      driveWindow.document.title = `Preparing ${product.sku} · Kairay Golf`;
-      driveWindow.document.body.textContent = `Preparing ${product.sku} in Google Drive…`;
-      driveWindow.document.body.style.cssText = "margin:0;min-height:100vh;display:grid;place-items:center;background:#fffaf5;color:#74171c;font:600 18px system-ui,sans-serif";
-    }
-    try {
-      let state = await prepareProductDriveCopy(product.sku);
-      if (!state.job_id) throw new Error("The Drive copy job did not return an ID.");
-      const jobId = state.job_id;
-      for (let attempt = 0; attempt < 120 && state.state !== "ready" && state.state !== "error"; attempt += 1) {
-        setDriveJob({ sku: product.sku, progress: state.progress || 0, complete: false });
-        await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        state = await getProductDriveCopyStatus(product.sku, jobId);
-      }
-      if (state.state === "error") throw new Error(state.error || "The Drive folder could not be created.");
-      if (state.state !== "ready") throw new Error("The Drive copy is taking too long. Please try again.");
-      if (!state.folder_url) throw new Error("Google Drive did not return the shared folder link.");
-      setDriveJob({ sku: product.sku, progress: 100, complete: true, expiresAt: state.expires_at });
-      setToast(`${product.sku} is ready in Google Drive for 15 days.`);
-      await new Promise((resolve) => window.setTimeout(resolve, 650));
-      if (driveWindow && !driveWindow.closed) {
-        driveWindow.location.replace(state.folder_url);
-      } else {
-        const opened = window.open(state.folder_url, "_blank", "noopener,noreferrer");
-        if (!opened) setToast(`${product.sku} is ready. Please allow pop-ups to open Google Drive.`);
-      }
-    } catch (error) {
-      if (driveWindow && !driveWindow.closed) driveWindow.close();
-      setDriveJob(null);
-      if (error instanceof SessionExpiredError) {
-        setCurrentUser(null);
-        window.location.hash = "";
-        setActiveView("landing");
-      }
-      setToast(error instanceof Error ? error.message : "The Drive folder could not be created.");
-    }
+  const openProductInDrive = (product: MaterialProduct) => {
+    if (!apiEnabled()) { setToast("Open in Drive requires a connected account."); return; }
+    driveTransfers.add(product.sku);
   };
 
   const navigate = (nextView: AppView) => {
@@ -856,6 +811,13 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
             </div>
           </section>
 
+          <section className="download-selection-bar" aria-label="Batch asset download">
+            <button className="button button-secondary" disabled={!catalogueReady || !visibleProducts.length} onClick={() => setDownloadSelection((current) => new Set([...current, ...visibleProducts.map((product) => product.sku)]))}>Select results ({visibleProducts.length})</button>
+            <span>{downloadSelection.size} selected</span>
+            <button className="button button-primary" disabled={!downloadSelection.size || downloads.choosingFolder} onClick={() => void downloads.add(products.filter((product) => downloadSelection.has(product.sku)))}><DownloadSimple size={18} />{downloads.choosingFolder ? "Choose a folder…" : "Download selected"}</button>
+            {!!downloadSelection.size && <button className="text-action" onClick={() => setDownloadSelection(new Set())}>Clear</button>}
+          </section>
+
           {parsedSearch.isBatchSkuSearch && catalogueReady && (
             <section className={`batch-search-summary ${batchMissingSkus.length ? "has-missing" : "is-complete"}`} aria-label="批量 SKU 搜索摘要">
               <div className="batch-search-counts">
@@ -911,6 +873,11 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
                     priority={index < 6}
                     onSelect={() => setSelectedSku(product.sku)}
                     onOpenDrive={() => openProductInDrive(product)}
+                    onDownload={() => void downloads.add([product])}
+                    downloadSelected={downloadSelection.has(product.sku)}
+                    onToggleDownload={() => setDownloadSelection((current) => {
+                      const next = new Set(current); if (next.has(product.sku)) next.delete(product.sku); else next.add(product.sku); return next;
+                    })}
                     onToggleFavorite={() => toggleProductFavorite(product)}
                   />
                 </Fragment>
@@ -978,6 +945,7 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
             product={selectedProduct}
             onClose={() => setSelectedSku(null)}
             onOpenDrive={() => openProductInDrive(selectedProduct)}
+            onDownload={() => void downloads.add([selectedProduct])}
             onToggleFavorite={() => toggleProductFavorite(selectedProduct)}
             isAdmin={currentUser.isAdmin}
             themeOptions={themeOptions}
@@ -988,17 +956,6 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
         )}
       </div>
 
-      {driveJob && (
-        <div className={`drive-progress ${driveJob.complete ? "is-complete" : ""}`} role="status">
-          {driveJob.complete ? <CheckCircle size={21} weight="fill" /> : <SpinnerGap size={21} weight="bold" />}
-          <div>
-            <strong>{driveJob.complete ? "Your Drive folder is ready" : `Preparing ${driveJob.sku}`}</strong>
-            <span>{driveJob.complete ? "Available for 15 days" : `${driveJob.progress}% · Copying in Drive`}</span>
-          </div>
-          <div className="drive-meter"><span style={{ width: `${driveJob.progress}%` }} /></div>
-          <button onClick={() => setDriveJob(null)} aria-label="Close progress"><X size={16} weight="bold" /></button>
-        </div>
-      )}
       </> : activeView === "quotation" ? (
         <CatalogSheet key={`${currentUser.id}:${currentUser.email}`} products={orderedCatalogProducts} search={search} onSearchChange={setSearch}
           draft={quotation.draft} publishedCatalogDraft={catalogOrder.draft} loading={loading} loadError={loadError} storageFailed={quotation.storageFailed}
@@ -1036,6 +993,7 @@ export function App({ initialUser }: { initialUser?: AuthUser | null }) {
         </>
       )}
 
+      {currentUser && <DownloadPanel downloads={downloads} drive={driveTransfers} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );

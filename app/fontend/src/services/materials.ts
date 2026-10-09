@@ -232,7 +232,7 @@ export async function loadProducts(
   return { products, source: "api" };
 }
 
-export async function loadProductDetail(sku: string): Promise<MaterialProduct> {
+export async function loadProductDetail(sku: string, signal?: AbortSignal): Promise<MaterialProduct> {
   if (!apiEnabled()) {
     const product = mockProducts.find((item) => item.sku === sku);
     if (!product) throw new Error("Product not found.");
@@ -243,6 +243,7 @@ export async function loadProductDetail(sku: string): Promise<MaterialProduct> {
     };
   }
   const response = await fetch(`/api/products/${encodeURIComponent(sku)}`, {
+    signal,
     headers: { Accept: "application/json" },
     credentials: "include",
   });
@@ -281,6 +282,7 @@ export async function setProductThemes(sku: string, themes: string[]): Promise<v
 export async function prepareProductDriveCopy(sku: string): Promise<DriveCopyState> {
   if (!apiEnabled()) return { state: "error", progress: 0, error: "Drive export requires a connected account." };
   const response = await fetch(`/sku/${encodeURIComponent(sku)}/drive/prepare`, {
+    signal: AbortSignal.timeout(30000),
     method: "POST",
     headers: { Accept: "application/json" },
     credentials: "include",
@@ -292,6 +294,7 @@ export async function prepareProductDriveCopy(sku: string): Promise<DriveCopySta
 export async function getProductDriveCopyStatus(sku: string, jobId: string): Promise<DriveCopyState> {
   const query = new URLSearchParams({ job_id: jobId });
   const response = await fetch(`/sku/${encodeURIComponent(sku)}/drive/status?${query}`, {
+    signal: AbortSignal.timeout(30000),
     headers: { Accept: "application/json" },
     credentials: "include",
   });

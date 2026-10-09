@@ -8,6 +8,7 @@
     "build": "tsc --noEmit -p tsconfig.app.json && vite build --config vite.config.mjs --configLoader runner",
     "preview": "vite preview --config vite.config.mjs --configLoader runner",
     "test:loading": "node --test tests/resourceLoading.test.mjs",
+    "test:downloads": "node --test tests/assetDownloads.test.mjs tests/driveTransfers.test.mjs",
     "check:performance": "node scripts/check-performance.mjs"
   },
   "dependencies": {
