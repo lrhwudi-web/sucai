@@ -37,6 +37,23 @@ async function settle(queue) {
 
 const fileResponse = () => new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "application/octet-stream" } });
 
+test("the default browser fetch retains its Window receiver for every product", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async function (url) {
+    // Browser fetch rejects a queue instance as its receiver (Illegal invocation).
+    assert.equal(this, globalThis);
+    calls.push(url);
+    return fileResponse();
+  };
+  try {
+    const queue = new AssetDownloadQueue(async (sku) => product(sku));
+    queue.add([product("1"), product("2")], memoryDirectory()); await settle(queue);
+    assert.ok(queue.snapshot().every((job) => job.state === "ready" && job.completed === 1));
+    assert.deepEqual(calls, ["/download/1", "/download/2"]);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test("multiple product tasks retain independent progress, deduplicate repeated clicks, and limit streams to two", async () => {
   const root = memoryDirectory(); const gates = []; const started = [];
   const queue = new AssetDownloadQueue(async (sku) => product(sku), async (url, options) => {

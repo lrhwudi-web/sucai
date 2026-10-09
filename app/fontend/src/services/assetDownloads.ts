@@ -74,7 +74,8 @@ export class AssetDownloadQueue {
   private listeners = new Set<(jobs: AssetDownloadJob[]) => void>();
   private version: AssetDownloadJob[] = [];
 
-  constructor(private loadDetail: (sku: string, signal: AbortSignal) => Promise<MaterialProduct>, private request: typeof fetch = fetch) {}
+  // Native fetch must be invoked on Window, rather than as a method of this queue.
+  constructor(private loadDetail: (sku: string, signal: AbortSignal) => Promise<MaterialProduct>, private request: typeof fetch = (input, init) => globalThis.fetch(input, init)) {}
 
   snapshot = () => this.version;
   subscribe = (listener: (jobs: AssetDownloadJob[]) => void) => {
